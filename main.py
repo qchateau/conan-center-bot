@@ -13,6 +13,9 @@ from conans import ConanFile
 
 RECIPES_PATH = None
 GITHUB_HOMEPAGE_RE = re.compile(r"https://github.com/([^/]+)/([^/]+)")
+VERSION_RE = re.compile(r"[0-9]+\.[0-9\.]+")
+VERSION_DASH_RE = re.compile(r"[0-9]+-[0-9-]+")
+VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+_[0-9_]+")
 
 GITHUB_TOKEN = None
 
@@ -38,11 +41,27 @@ def to_numeric_version(version):
 
 
 def fix_version(version):
-    if version and version[0] == "v":
-        # a lot of tags are v1.2.3 instead of 1.2.3
-        fixed_version = version[1:]
-    else:
-        fixed_version = version
+    version = str(version)
+    fixed_version = version
+
+    while True:  # to break from
+        match = VERSION_RE.search(version)
+        if match:
+            fixed_version = match.group(0)
+            break
+
+        match = VERSION_DASH_RE.search(version)
+        if match:
+            fixed_version = match.group(0).replace("-", ".")
+            break
+
+        match = VERSION_UNDERSCORE_RE.search(version)
+        if match:
+            fixed_version = match.group(0).replace("_", ".")
+            break
+
+        break
+
     return fixed_version
 
 
@@ -70,7 +89,10 @@ def read_recipe_config(recipe):
 def find_recipe_most_recent_version(recipe):
     config = read_recipe_config(recipe)
     versions = list(config["versions"].keys())
-    most_recent = most_recent_version(versions)
+    if len(versions) == 1:
+        most_recent = versions[0]
+    else:
+        most_recent = most_recent_version(versions)
     if not most_recent:
         raise UnsupportedRecipe(f"Could not find most recent version")
     version_folder = config["versions"][most_recent]["folder"]
@@ -126,6 +148,8 @@ def find_most_recent_upstream_version_github(url):
         raise UnsupportedRecipe(f"Could not find tags: {resp.reason}")
     tags = {rel["name"]: rel for rel in resp.json()}
     versions = list(tags.keys())
+    if not versions:
+        raise UnsupportedRecipe("No upstream version")
     most_recent = most_recent_version(versions)
     if not most_recent:
         raise UnsupportedRecipe("Could not find most recent upstream version")
@@ -229,14 +253,8 @@ def add_version_to_conandata(recipe, version, folder, url, hash_digest):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "conan_center_index_path",
-        nargs="?",
-        default=os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), "../conan-center-index/"
-        ),
-    )
-    parser.add_argument("--recipe")
+    parser.add_argument("conan_center_index_path")
+    parser.add_argument("--recipe", nargs="*")
     parser.add_argument("--github-token")
     parser.add_argument("--test", action="store_true")
     args = parser.parse_args()
@@ -249,21 +267,22 @@ def main():
         GITHUB_TOKEN = args.github_token
 
     if args.recipe:
-        add_version(args.recipe, test=args.test)
+        recipes = args.recipe
     else:
         recipes = os.listdir(RECIPES_PATH)
-        print(f"Found {len(recipes)} recipes")
 
-        for recipe in recipes:
-            print(f"{recipe}...\r", end="")
-            sys.stdout.flush()
-            try:
-                if add_version(recipe, test=args.test):
-                    print(f"{recipe:20}: new version")
-                else:
-                    print(f"{recipe:20}: skipped")
-            except UnsupportedRecipe as e:
-                print(f"{recipe:20}: unsupported ({str(e)[:50]})")
+    print(f"Using {len(recipes)} recipes")
+
+    for recipe in recipes:
+        print(f"{recipe}...\r", end="")
+        sys.stdout.flush()
+        try:
+            if add_version(recipe, test=args.test):
+                print(f"{recipe:20}: new version")
+            else:
+                print(f"{recipe:20}: skipped")
+        except UnsupportedRecipe as e:
+            print(f"{recipe:20}: unsupported ({str(e)[:50]})")
 
 
 if __name__ == "__main__":
