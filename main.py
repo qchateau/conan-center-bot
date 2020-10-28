@@ -6,6 +6,7 @@ import inspect
 import hashlib
 import subprocess
 import importlib.util
+from multiprocessing import Pool
 
 import yaml
 import requests
@@ -175,9 +176,7 @@ def find_folder(recipe, version):
     return version_folder
 
 
-def add_version(
-    recipe, version=None, folder=None, url=None, hash_digest=None, test=True
-):
+def add_version(recipe, version=None, folder=None, url=None, hash_digest=None):
     if not version or not url:
         found_version, found_url = find_most_recent_upstream_version(recipe)
         version = fix_version(found_version) if version is None else version
@@ -191,7 +190,7 @@ def add_version(
     config = read_recipe_config(recipe)
     versions = list(config["versions"].keys())
     if version in versions:
-        return False
+        return None
 
     if not folder:
         folder = find_folder(recipe, version)
@@ -207,24 +206,22 @@ def add_version(
 
     add_version_to_config(recipe, version, folder)
     add_version_to_conandata(recipe, version, folder, url, hash_digest)
+    return version
 
-    if test:
-        config = read_recipe_config(recipe)
-        version_folder = config["versions"][version]["folder"]
-        version_folder_path = os.path.join(recipe_path(recipe), version_folder)
-        env = os.environ.copy()
-        env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-        code = subprocess.call(
-            ["conan", "create", ".", f"{recipe}/{version}@"],
-            env=env,
-            cwd=version_folder_path,
-            # stdout=subprocess.DEVNULL,
-            # stderr=subprocess.DEVNULL,
-        )
-        if code != 0:
-            raise UnsupportedRecipe(f"Test failed")
-    return True
+def test_recipe(recipe, version):
+    config = read_recipe_config(recipe)
+    version_folder = config["versions"][version]["folder"]
+    version_folder_path = os.path.join(recipe_path(recipe), version_folder)
+    env = os.environ.copy()
+    env["CONAN_HOOK_ERROR_LEVEL"] = "40"
+
+    subprocess.check_output(
+        ["conan", "create", ".", f"{recipe}/{version}@"],
+        env=env,
+        cwd=version_folder_path,
+        stderr=subprocess.STDOUT,
+    )
 
 
 def add_version_to_config(recipe, version, folder):
@@ -251,12 +248,35 @@ def add_version_to_conandata(recipe, version, folder, url, hash_digest):
         yaml.dump(conandata, fil)
 
 
+def process_recipe(recipe, args):
+    print(f"{recipe}...\r", end="")
+    sys.stdout.flush()
+    try:
+        version = add_version(recipe)
+        if version:
+            print(f"{recipe:20}: new version")
+            if args.test:
+                try:
+                    print(f"{recipe:20}: testing...\r", end="")
+                    sys.stdout.flush()
+                    test_recipe(recipe, version)
+                except subprocess.CalledProcessError as exc:
+                    print(f"{recipe:20}: test failed")
+                    print(f"\n\n{exc.output.decode()}\n\n")
+
+        else:
+            print(f"{recipe:20}: skipped")
+    except UnsupportedRecipe as e:
+        print(f"{recipe:20}: unsupported ({str(e)[:50]})")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("conan_center_index_path")
     parser.add_argument("--recipe", nargs="*")
     parser.add_argument("--github-token")
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--processes", default=os.cpu_count() * 10)
     args = parser.parse_args()
 
     global RECIPES_PATH
@@ -273,16 +293,12 @@ def main():
 
     print(f"Using {len(recipes)} recipes")
 
-    for recipe in recipes:
-        print(f"{recipe}...\r", end="")
-        sys.stdout.flush()
-        try:
-            if add_version(recipe, test=args.test):
-                print(f"{recipe:20}: new version")
-            else:
-                print(f"{recipe:20}: skipped")
-        except UnsupportedRecipe as e:
-            print(f"{recipe:20}: unsupported ({str(e)[:50]})")
+    with Pool(args.processes) as p:
+        results = [
+            p.apply_async(process_recipe, args=(recipe, args)) for recipe in recipes
+        ]
+        for r in results:
+            r.get()
 
 
 if __name__ == "__main__":
