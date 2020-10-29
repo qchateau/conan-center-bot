@@ -12,3 +12,9 @@ class VersionAlreadyExists(CcbError):
 
 class UnsupportedUpstreamProject(CcbError):
     pass
+
+
+class TestFailed(CcbError):
+    def __init__(self, output):
+        super().__init__("Test failed")
+        self.output = output

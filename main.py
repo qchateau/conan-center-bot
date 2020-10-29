@@ -18,11 +18,12 @@ from ccb.exceptions import (
     UnsupportedRecipe,
     UnsupportedUpstreamProject,
     VersionAlreadyExists,
+    TestFailed,
 )
 from ccb.worktree import RecipeInWorktree
 
 
-def add_version(recipe, version=None, folder=None, url=None, hash_digest=None):
+def add_version(recipe, args):
     upstream = get_upstream_project(recipe)
     if not upstream.versions:
         raise UnsupportedUpstreamProject("No versions in upstream project")
@@ -48,6 +49,13 @@ def add_version(recipe, version=None, folder=None, url=None, hash_digest=None):
 
     with RecipeInWorktree(recipe, branch_name) as new_recipe:
         new_recipe.add_version(folder, version, url, hash_digest)
+
+        if args.test:
+            try:
+                recipe.test(version)
+            except subprocess.CalledProcessError as exc:
+                raise TestFailed(exc.output.decode())
+
         subprocess.check_call(
             [
                 "git",
@@ -60,6 +68,12 @@ def add_version(recipe, version=None, folder=None, url=None, hash_digest=None):
             cwd=new_recipe.path,
         )
 
+        if args.push:
+            subprocess.check_call(
+                ["git", "push", "--set-upstream" "origin", branch_name],
+                cwd=new_recipe.path,
+            )
+
     return version, branch_name
 
 
@@ -68,21 +82,15 @@ def process_recipe(recipe_name, args):
     sys.stdout.flush()
     try:
         recipe = Recipe(args.conan_center_index_path, recipe_name)
-        version, branch_name = add_version(recipe)
+        version, branch_name = add_version(recipe, args)
         print(f"{recipe_name:20}: added {version.fixed} in branch {branch_name}")
-        if args.test:
-            try:
-                print(f"{recipe_name:20}: testing...\r", end="")
-                sys.stdout.flush()
-                recipe.test(version)
-            except subprocess.CalledProcessError as exc:
-                print(f"{recipe_name:20}: test failed")
-                print(f"\n\n{exc.output.decode()}\n\n")
-
     except UnsupportedRecipe as e:
         print(f"{recipe_name:20}: unsupported recipe ({str(e)[:50]})")
     except UnsupportedUpstreamProject as e:
         print(f"{recipe_name:20}: unsupported project ({str(e)[:50]})")
+    except TestFailed as e:
+        print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
+        print(f"\n\n{e.output}\n\n")
     except VersionAlreadyExists as e:
         print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
 
@@ -93,6 +101,7 @@ def main():
     parser.add_argument("--recipe", nargs="*")
     parser.add_argument("--github-token")
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--push", action="store_true")
     parser.add_argument("--processes", default=os.cpu_count() * 10)
     args = parser.parse_args()
 
