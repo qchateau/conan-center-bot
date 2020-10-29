@@ -41,21 +41,45 @@ def add_version(recipe, args):
         )
         == 0
     ):
-        raise VersionAlreadyExists("A branch already exists for this version")
+        if args.force:
+            subprocess.check_output(
+                ["git", "branch", "-q", "-D", branch_name], cwd=recipe.path
+            )
+        else:
+            raise VersionAlreadyExists("A branch already exists for this version")
+
+    if (
+        not args.force
+        and subprocess.call(
+            [
+                "git",
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/remotes/{args.remote}/{branch_name}",
+            ],
+            cwd=recipe.path,
+        )
+        == 0
+    ):
+        raise VersionAlreadyExists("A remote branch already exists for this version")
 
     url = upstream.tarball_url(version)
     hash_digest = upstream.tarball_sha256_digest(version)
     folder = recipe.versions_folders[recipe.most_recent_version]
 
-    with RecipeInWorktree(recipe, branch_name) as new_recipe:
+    with RecipeInWorktree(recipe) as new_recipe:
         new_recipe.add_version(folder, version, url, hash_digest)
 
         if args.test:
             try:
-                recipe.test(version)
+                new_recipe.test(version)
             except subprocess.CalledProcessError as exc:
                 raise TestFailed(exc.output.decode())
 
+        subprocess.check_call(
+            ["git", "checkout", "-q", "-b", branch_name], cwd=new_recipe.path
+        )
         subprocess.check_call(
             [
                 "git",
@@ -69,8 +93,10 @@ def add_version(recipe, args):
         )
 
         if args.push:
-            subprocess.check_call(
-                ["git", "push", "--set-upstream" "origin", branch_name],
+            subprocess.check_output(
+                ["git", "push", "-q", "--set-upstream"]
+                + (["-f"] if args.force else [])
+                + [args.remote, branch_name],
                 cwd=new_recipe.path,
             )
 
@@ -90,9 +116,18 @@ def process_recipe(recipe_name, args):
         print(f"{recipe_name:20}: unsupported project ({str(e)[:50]})")
     except TestFailed as e:
         print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
-        print(f"\n\n{e.output}\n\n")
+        print()
+        print()
+        print("=" * 80)
+        print(e.output)
+        print("=" * 80)
+        print()
+        print()
     except VersionAlreadyExists as e:
         print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
+    except Exception as e:
+        print(f"{recipe_name:20}: error ({repr(e)[:50]})")
+        raise
 
 
 def main():
@@ -102,7 +137,9 @@ def main():
     parser.add_argument("--github-token")
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--push", action="store_true")
-    parser.add_argument("--processes", default=os.cpu_count() * 10)
+    parser.add_argument("--remote", default="origin")
+    parser.add_argument("--force", "-f", action="store_true")
+    parser.add_argument("--processes", default=os.cpu_count())
     args = parser.parse_args()
 
     args.conan_center_index_path = os.path.abspath(args.conan_center_index_path)
@@ -117,7 +154,7 @@ def main():
 
     print(f"Using {len(recipes)} recipes")
 
-    with Pool(args.processes) as p:
+    with Pool(int(args.processes)) as p:
         results = [
             p.apply_async(process_recipe, args=(recipe, args)) for recipe in recipes
         ]

@@ -11,16 +11,12 @@ Create one here: https://github.com/settings/tokens
 
 ## How does it work
 
-The script will try to locate the most recent version in CCI, and the most
-recent version in GitHub. If GitHub contains a version that is more recent than
-the latest one on CCI, the script will add it to the CCI repository.
+The script will try to locate the most recent version in CCI, and the most recent version in GitHub. If GitHub contains a version that is more recent than the latest one on CCI, the script will add it to the CCI repository,
+in a new branch and commit it.
 
 After you ran the script:
 
-- Move to CCI
-- Verify and maybe tweak the diff
-- Run the test
-- Commit
+- Verify and maybe tweak the diff in the nea branch
 - Open a PR on CCI
 
 ## Limitations
@@ -30,16 +26,16 @@ After you ran the script:
 - Recipes require a config.yml file.
 - Still requires manual operations.
 
-## Update everything
+## Update, test and push everything
 
 ```bash
-python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token>
+python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> --test --push -f
 ```
 
-## Update and test a single recipe
+## Update, test and push a single recipe
 
 It's up to you to configure the correct conan hooks for the test.
 
 ```bash
-python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> --recipe <recipe-name> --test
+python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> --recipe <recipe-name> --test --push -f
 ```

@@ -43,10 +43,7 @@ class Recipe:
         return self.__conanfile_classes[version]
 
     def version_exists(self, version):
-        return (
-            version.original in self.config["versions"]
-            or version.fixed in self.config["versions"]
-        )
+        return version.fixed in self.config["versions"]
 
     def add_version(self, folder, version, url, digest):
         assert isinstance(version, Version)
@@ -71,16 +68,12 @@ class Recipe:
         assert isinstance(version, Version)
 
         version_folder_path = os.path.join(self.path, self.versions_folders[version])
-        if version.fixed in self.config["versions"]:
-            version_str = version.fixed
-        else:
-            version_str = version.original
 
         env = os.environ.copy()
         env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
         subprocess.check_output(
-            ["conan", "create", ".", f"{self.name}/{version_str}@"],
+            ["conan", "create", ".", f"{self.name}/{version.fixed}@"],
             env=env,
             cwd=version_folder_path,
             stderr=subprocess.STDOUT,

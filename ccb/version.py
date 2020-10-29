@@ -14,10 +14,10 @@ class Version:
         self.to_numeric = _to_numeric(self.fixed)
 
     def __hash__(self):
-        return hash(self.original)
+        return hash(self.fixed)
 
     def __eq__(self, other):
-        return self.original == other.original
+        return self.fixed == other.fixed
 
     def __lt__(self, other):
         assert isinstance(other, Version)
@@ -26,8 +26,6 @@ class Version:
             return False
         if self.to_numeric is None:
             return True
-        if self.to_numeric == other.to_numeric:
-            return self.original < other.original
         return self.to_numeric < other.to_numeric
 
     def __str__(self):
