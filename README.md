@@ -1,13 +1,7 @@
 # conan-center-bot
 
 This is a script to help update recipes in conan-center-index.
-CUrrently is only supports updating recipes that use GitHub.
-
-## GitHub token
-
-You'll need a github token to allow more than 60 requests per hour to `api.github.com`.
-
-Create one here: https://github.com/settings/tokens
+Currently is only supports updating recipes that use GitHub.
 
 ## How does it work
 
@@ -29,7 +23,7 @@ After you ran the script:
 ## Update, test and push everything
 
 ```bash
-python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> --test --push -f
+python3 main.py <path-to-conan-center-index-repo>  --test --push -f
 ```
 
 ## Update, test and push a single recipe
@@ -37,5 +31,5 @@ python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> 
 It's up to you to configure the correct conan hooks for the test.
 
 ```bash
-python3 main.py <path-to-conan-center-index-repo> --github-token=<github-token> --recipe <recipe-name> --test --push -f
+python3 main.py <path-to-conan-center-index-repo> --recipe <recipe-name> --test --push -f
 ```

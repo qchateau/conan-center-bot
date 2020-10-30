@@ -1,165 +1,76 @@
 import os
-import re
 import sys
 import argparse
-import inspect
-import hashlib
-import subprocess
-import importlib.util
-from multiprocessing import Pool
+import logging
 
-import yaml
-import requests
+from ccb.recipe import get_recipes_list
+from ccb.status import print_status_table, print_status_json
 
-from ccb.config import set_github_token
-from ccb.recipe import Recipe, get_recipes_list
-from ccb.upstream_project import get_upstream_project
-from ccb.exceptions import (
-    UnsupportedRecipe,
-    UnsupportedUpstreamProject,
-    VersionAlreadyExists,
-    TestFailed,
-)
-from ccb.worktree import RecipeInWorktree
+ROOT = os.path.dirname(os.path.realpath(__file__))
 
 
-def add_version(recipe, args):
-    upstream = get_upstream_project(recipe)
-    if not upstream.versions:
-        raise UnsupportedUpstreamProject("No versions in upstream project")
+def bad_command(args, parser):
+    parser.print_usage()
+    return 1
 
-    version = upstream.most_recent_version
 
-    if recipe.version_exists(version):
-        raise VersionAlreadyExists("Version already exists in CCI")
-
-    branch_name = f"{recipe.name}-{version.fixed}"
-    if (
-        subprocess.call(
-            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"],
-            cwd=recipe.path,
+def main_status(args):
+    if args.json:
+        return print_status_json(
+            cci_path=args.cci,
+            recipes=args.recipe,
+            print_all=args.all,
+            jobs=int(args.jobs),
         )
-        == 0
-    ):
-        if args.force:
-            subprocess.check_output(
-                ["git", "branch", "-q", "-D", branch_name], cwd=recipe.path
-            )
-        else:
-            raise VersionAlreadyExists("A branch already exists for this version")
-
-    if (
-        not args.force
-        and subprocess.call(
-            [
-                "git",
-                "show-ref",
-                "--verify",
-                "--quiet",
-                f"refs/remotes/{args.remote}/{branch_name}",
-            ],
-            cwd=recipe.path,
-        )
-        == 0
-    ):
-        raise VersionAlreadyExists("A remote branch already exists for this version")
-
-    url = upstream.tarball_url(version)
-    hash_digest = upstream.tarball_sha256_digest(version)
-    folder = recipe.versions_folders[recipe.most_recent_version]
-
-    with RecipeInWorktree(recipe) as new_recipe:
-        new_recipe.add_version(folder, version, url, hash_digest)
-
-        if args.test:
-            try:
-                new_recipe.test(version)
-            except subprocess.CalledProcessError as exc:
-                raise TestFailed(exc.output.decode())
-
-        subprocess.check_call(
-            ["git", "checkout", "-q", "-b", branch_name], cwd=new_recipe.path
-        )
-        subprocess.check_call(
-            [
-                "git",
-                "commit",
-                "-q",
-                "-a",
-                "-m",
-                f"{recipe.name}: add version {version.fixed}",
-            ],
-            cwd=new_recipe.path,
+    else:
+        return print_status_table(
+            cci_path=args.cci,
+            recipes=args.recipe,
+            print_all=args.all,
+            jobs=int(args.jobs),
         )
 
-        if args.push:
-            subprocess.check_output(
-                ["git", "push", "-q", "--set-upstream"]
-                + (["-f"] if args.force else [])
-                + [args.remote, branch_name],
-                cwd=new_recipe.path,
-            )
 
-    return version, branch_name
+def add_subparser(subparsers, name, function):
+    subparser = subparsers.add_parser(name)
 
+    subparser.add_argument("--versbose", "-v", action="store_true")
+    subparser.add_argument("--cci")
+    subparser.add_argument("--recipe", nargs="+")
 
-def process_recipe(recipe_name, args):
-    print(f"{recipe_name}...\r", end="")
-    sys.stdout.flush()
-    try:
-        recipe = Recipe(args.conan_center_index_path, recipe_name)
-        version, branch_name = add_version(recipe, args)
-        print(f"{recipe_name:20}: added {version.fixed} in branch {branch_name}")
-    except UnsupportedRecipe as e:
-        print(f"{recipe_name:20}: unsupported recipe ({str(e)[:50]})")
-    except UnsupportedUpstreamProject as e:
-        print(f"{recipe_name:20}: unsupported project ({str(e)[:50]})")
-    except TestFailed as e:
-        print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
-        print()
-        print()
-        print("=" * 80)
-        print(e.output)
-        print("=" * 80)
-        print()
-        print()
-    except VersionAlreadyExists as e:
-        print(f"{recipe_name:20}: skipped ({str(e)[:50]})")
-    except Exception as e:
-        print(f"{recipe_name:20}: error ({repr(e)[:50]})")
-        raise
+    subparser.set_defaults(func=function)
+    return subparser
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("conan_center_index_path")
-    parser.add_argument("--recipe", nargs="*")
-    parser.add_argument("--github-token")
-    parser.add_argument("--test", action="store_true")
-    parser.add_argument("--push", action="store_true")
-    parser.add_argument("--remote", default="origin")
-    parser.add_argument("--force", "-f", action="store_true")
-    parser.add_argument("--processes", default=os.cpu_count())
+    parser.set_defaults(func=lambda args: bad_command(args, parser))
+    subparsers = parser.add_subparsers()
+
+    parser_status = add_subparser(subparsers, "status", main_status)
+    parser_status.add_argument("--all", "-a", action="store_true")
+    parser_status.add_argument("--json", action="store_true")
+    parser_status.add_argument("--jobs", "-j", default=str(10 * os.cpu_count()))
+
     args = parser.parse_args()
 
-    args.conan_center_index_path = os.path.abspath(args.conan_center_index_path)
+    if args.versbose:
+        logging.basicConfig()
+        logger = logging.getLogger("ccb")
+        logger.setLevel(logging.DEBUG)
 
-    if args.github_token:
-        set_github_token(args.github_token)
+    if not args.cci:
+        args.cci = os.path.join(ROOT, "..", "conan-center-index")
 
-    if args.recipe:
-        recipes = args.recipe
-    else:
-        recipes = get_recipes_list(args.conan_center_index_path)
+    args.cci = os.path.abspath(args.cci)
+    if not os.path.exists(args.cci):
+        print(f"CCI repository not found at {args.cci}")
+        sys.exit(1)
 
-    print(f"Using {len(recipes)} recipes")
+    if not args.recipe:
+        args.recipe = get_recipes_list(args.cci)
 
-    with Pool(int(args.processes)) as p:
-        results = [
-            p.apply_async(process_recipe, args=(recipe, args)) for recipe in recipes
-        ]
-        for r in results:
-            r.get()
+    sys.exit(args.func(args))
 
 
 if __name__ == "__main__":

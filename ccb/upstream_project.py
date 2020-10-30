@@ -1,77 +1,117 @@
 import re
+import abc
 import hashlib
 import requests
+import logging
+import tempfile
+import subprocess
+from functools import cached_property, lru_cache
 
-from .recipe import Recipe
-from .config import get_github_token
 from .version import Version
-from .exceptions import UnsupportedUpstreamProject
 
 
-def get_upstream_project(recipe: Recipe):
+logger = logging.getLogger(__name__)
+
+
+class _Unsupported(RuntimeError):
+    pass
+
+
+def get_upstream_project(recipe):
     conanfile_class = recipe.conanfile_class(recipe.most_recent_version)
     for cls in _CLASSES:
-        if cls.supports(conanfile_class):
-            return cls(recipe)
-    raise UnsupportedUpstreamProject(
-        f"Cannot handle project at {conanfile_class.homepage}"
-    )
+        try:
+            return cls(recipe, conanfile_class)
+        except _Unsupported:
+            pass
+
+    logger.warn("%s: unsupported upstream", recipe.name)
+    return UnsupportedProject(recipe, conanfile_class)
 
 
-class GithubProject:
-    HOMEPAGE_RE = re.compile(r"https://github.com/([^/]+)/([^/]+)")
-
-    @classmethod
-    def supports(cls, conanfile_class):
-        return bool(cls.HOMEPAGE_RE.match(conanfile_class.homepage))
-
-    def __init__(self, recipe: Recipe):
+class UpstreamProject(abc.ABC):
+    def __init__(self, recipe, conanfile_class):
         self.recipe = recipe
+        self.conanfile_class = conanfile_class
 
-        self.conanfile_class = self.recipe.conanfile_class(
-            self.recipe.most_recent_version
-        )
+    @abc.abstractproperty
+    def versions(self) -> dict:
+        pass
 
-        match = self.HOMEPAGE_RE.match(self.conanfile_class.homepage)
-        self.owner = match.group(1)
-        self.repo = match.group(2)
+    @abc.abstractproperty
+    def most_recent_version(self) -> Version:
+        pass
 
-        self.__versions = None
-        self.__tarball_digests = dict()
+    @abc.abstractmethod
+    def source_url(self, version) -> str:
+        pass
 
-    @property
+    @lru_cache
+    def source_sha256_digest(self, version):
+        url = self.source_url(version)
+        if not url:
+            return None
+        sha256 = hashlib.sha256()
+        tarball = requests.get(url)
+        sha256.update(tarball.content)
+        return sha256.hexdigest()
+
+
+class UnsupportedProject(UpstreamProject):
+    @cached_property
     def versions(self):
-        if self.__versions is None:
-            tags_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/tags"
-
-            resp = requests.get(tags_url, headers=_get_github_api_headers())
-            if not resp.ok:
-                raise UnsupportedUpstreamProject(f"Could not find tags: {resp.reason}")
-            self.__versions = tuple(Version(rel["name"]) for rel in resp.json())
-        return self.__versions
+        return {}
 
     @property
     def most_recent_version(self):
+        return Version()
+
+    def source_url(self, version):
+        return None
+
+
+class GitProject(UpstreamProject):
+    def __init__(self, recipe, conanfile_class, git_url):
+        super().__init__(recipe, conanfile_class)
+        self.git_url = git_url
+
+    @cached_property
+    def versions(self):
+        git_output = subprocess.check_output(
+            ["git", "ls-remote", "-t", self.git_url]
+        ).decode()
+        tags = [ref.replace("refs/tags/", "") for ref in git_output.split()[1::2]]
+        logger.info(f"Found: {tags}")
+
+        return tuple(Version(tag) for tag in tags)
+
+    @property
+    def most_recent_version(self):
+        if not self.versions:
+            return Version()
         return sorted(self.versions)[-1]
 
-    def tarball_url(self, version):
+
+class GithubProject(GitProject):
+    HOMEPAGE_RE = re.compile(r"https://github.com/([^/]+)/([^/]+)")
+
+    def __init__(self, recipe, conanfile_class):
+        match = self.HOMEPAGE_RE.match(conanfile_class.homepage)
+        if not match:
+            raise _Unsupported()
+
+        owner = match.group(1)
+        repo = match.group(2)
+        git_url = f"https://github.com/{owner}/{repo}.git"
+
+        super().__init__(recipe, conanfile_class, git_url)
+        self.owner = owner
+        self.repo = repo
+
+    def source_url(self, version):
+        if version.unknown:
+            return None
         return f"https://github.com/{self.owner}/{self.repo}/archive/{version.original}.tar.gz"
-
-    def tarball_sha256_digest(self, version):
-        if version not in self.__tarball_digests:
-            sha256 = hashlib.sha256()
-            tarball = requests.get(self.tarball_url(version))
-            sha256.update(tarball.content)
-            self.__tarball_digests[version] = sha256.hexdigest()
-        return self.__tarball_digests[version]
-
-
-def _get_github_api_headers():
-    token = get_github_token()
-    if token:
-        return {"Authorization": f"token {token}"}
-    else:
-        return None
 
 
 _CLASSES = [GithubProject]

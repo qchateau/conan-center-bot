@@ -3,11 +3,13 @@ import yaml
 import inspect
 import subprocess
 import importlib.util
+from functools import cached_property, lru_cache
 
 from conans import ConanFile
 
-from .exceptions import UnsupportedRecipe
+from .exceptions import RecipeError
 from .version import Version
+from .upstream_project import get_upstream_project
 
 
 def get_recipes_list(cci_path):
@@ -20,12 +22,16 @@ class Recipe:
         self.path = os.path.join(cci_path, "recipes", name)
         self.config_file_path = os.path.join(self.path, "config.yml")
         if not os.path.exists(self.config_file_path):
-            raise UnsupportedRecipe("No config.yml file")
+            raise RecipeError("No config.yml file")
 
+    @cached_property
+    def upstream(self):
+        return get_upstream_project(self)
+
+    @property
+    def config(self):
         with open(self.config_file_path) as fil:
-            self.config = yaml.load(fil, Loader=yaml.FullLoader)
-
-        self.__conanfile_classes = dict()
+            return yaml.load(fil, Loader=yaml.FullLoader)
 
     @property
     def versions_folders(self):
@@ -35,51 +41,8 @@ class Recipe:
     def most_recent_version(self):
         return sorted(self.versions_folders.keys())[-1]
 
+    @lru_cache
     def conanfile_class(self, version):
-        assert isinstance(version, Version)
-
-        if version not in self.__conanfile_classes:
-            self.__conanfile_classes[version] = self._read_conanfile_class(version)
-        return self.__conanfile_classes[version]
-
-    def version_exists(self, version):
-        return version.fixed in self.config["versions"]
-
-    def add_version(self, folder, version, url, digest):
-        assert isinstance(version, Version)
-
-        conandata_path = os.path.join(self.path, folder, "conandata.yml")
-        if not os.path.exists(conandata_path):
-            raise UnsupportedRecipe(f"No conandata.yml in {folder}")
-
-        with open(conandata_path) as fil:
-            conandata = yaml.load(fil, Loader=yaml.FullLoader)
-
-        self.config["versions"][version.fixed] = {"folder": folder}
-        conandata["sources"][version.fixed] = {"sha256": digest, "url": url}
-
-        with open(self.config_file_path, "w") as fil:
-            yaml.dump(self.config, fil)
-
-        with open(conandata_path, "w") as fil:
-            yaml.dump(conandata, fil)
-
-    def test(self, version):
-        assert isinstance(version, Version)
-
-        version_folder_path = os.path.join(self.path, self.versions_folders[version])
-
-        env = os.environ.copy()
-        env["CONAN_HOOK_ERROR_LEVEL"] = "40"
-
-        subprocess.check_output(
-            ["conan", "create", ".", f"{self.name}/{version.fixed}@"],
-            env=env,
-            cwd=version_folder_path,
-            stderr=subprocess.STDOUT,
-        )
-
-    def _read_conanfile_class(self, version):
         assert isinstance(version, Version)
 
         version_folder_path = os.path.join(self.path, self.versions_folders[version])
@@ -102,6 +65,44 @@ class Recipe:
                 break
 
         if conanfile_main_class is None:
-            raise UnsupportedRecipe("Could not find ConanFile class")
+            raise RecipeError("Could not find ConanFile class")
 
         return conanfile_main_class
+
+    def version_exists(self, version):
+        return version.fixed in self.config["versions"]
+
+    def add_version(self, folder, version, url, digest):
+        assert isinstance(version, Version)
+
+        conandata_path = os.path.join(self.path, folder, "conandata.yml")
+        if not os.path.exists(conandata_path):
+            raise RecipeError(f"No conandata.yml in {folder}")
+
+        with open(conandata_path) as fil:
+            conandata = yaml.load(fil, Loader=yaml.FullLoader)
+
+        config = self.config.copy()
+        config["versions"][version.fixed] = {"folder": folder}
+        conandata["sources"][version.fixed] = {"sha256": digest, "url": url}
+
+        with open(self.config_file_path, "w") as fil:
+            yaml.dump(config, fil)
+
+        with open(conandata_path, "w") as fil:
+            yaml.dump(conandata, fil)
+
+    def test(self, version):
+        assert isinstance(version, Version)
+
+        version_folder_path = os.path.join(self.path, self.versions_folders[version])
+
+        env = os.environ.copy()
+        env["CONAN_HOOK_ERROR_LEVEL"] = "40"
+
+        subprocess.check_output(
+            ["conan", "create", ".", f"{self.name}/{version.fixed}@"],
+            env=env,
+            cwd=version_folder_path,
+            stderr=subprocess.STDOUT,
+        )

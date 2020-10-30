@@ -8,10 +8,16 @@ VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+_[0-9_]+")
 
 @functools.total_ordering
 class Version:
-    def __init__(self, version):
+    UNKNOWN = "unknown"
+
+    def __init__(self, version=UNKNOWN):
         self.original = version
         self.fixed = _fix_version(version)
         self.to_numeric = _to_numeric(self.fixed)
+
+    @property
+    def unknown(self):
+        return self.original == self.UNKNOWN
 
     def __hash__(self):
         return hash(self.fixed)
