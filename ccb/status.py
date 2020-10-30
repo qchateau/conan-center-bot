@@ -1,45 +1,21 @@
 import json
 import logging
-import typing
 from multiprocessing import Pool
 from terminaltables import AsciiTable
 from colored import fg, stylize
 
 from .recipe import get_recipes_list, Recipe
-from .exceptions import RecipeError
 from .version import Version
 
 logger = logging.getLogger(__name__)
 
 
-class Status(typing.NamedTuple):
-    name: str
-    recipe_version: Version
-    upstream_version: Version
-
-    def update_possible(self):
-        return (
-            not self.upstream_version.unknown
-            and not self.recipe_version.unknown
-            and self.upstream_version > self.recipe_version
-        )
-
-
 def status_one_recipe(cci_path, recipe_name):
-    try:
-        recipe = Recipe(cci_path, recipe_name)
-        recipe_version = recipe.most_recent_version
-        recipe_upstream_version = recipe.upstream.most_recent_version
-    except RecipeError as exc:
-        logger.warn("%s: could not find version: %s", recipe_name, exc)
-        recipe_version = Version()
-        recipe_upstream_version = Version()
-
-    return Status(recipe_name, recipe_version, recipe_upstream_version)
+    return Recipe(cci_path, recipe_name).status()
 
 
 def get_status(cci_path, recipes, jobs):
-    logger.info(f"Parsing {len(recipes)} recipes")
+    logger.info(f"Parsing {len(recipes)} recipes...")
 
     with Pool(jobs) as p:
         status_futures = [

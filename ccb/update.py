@@ -3,7 +3,7 @@ import yaml
 import logging
 import subprocess
 
-from .recipe import Recipe
+from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
 
 
@@ -80,7 +80,7 @@ def add_version(recipe, folder, conan_version, upstream_version):
 
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
-    config = recipe.config.copy()
+    config = recipe.config()
     config["versions"][conan_version] = {"folder": folder}
     conandata["sources"][conan_version] = {"sha256": hash_digest, "url": url}
 
@@ -121,6 +121,12 @@ def update_one_recipe(cci_path, recipe_name, run_test, push, force):
     if upstream_version.unknown:
         raise _Failure("upstream version is unknown")
     conan_version = upstream_version.fixed
+
+    if recipe.status().up_to_date():
+        raise _Failure("recipe is up-to-date")
+
+    if not recipe.status().update_possible():
+        raise _Failure("update is not possible")
 
     branch_name = f"{recipe.name}-{conan_version}"
     if branch_exists(recipe, branch_name):
@@ -168,10 +174,12 @@ def update_one_recipe(cci_path, recipe_name, run_test, push, force):
 
 
 def update_recipes(cci_path, recipes, run_test, push, force):
+    ok = True
     for recipe in recipes:
         try:
             update_one_recipe(cci_path, recipe, run_test, push, force)
-        except _Failure as exc:
-            logger.warn("%s: %s", recipe, str(exc))
+        except (_Failure, RecipeError) as exc:
+            logger.error("%s: %s", recipe, str(exc))
+            ok = False
 
-    return 0
+    return 0 if ok else 1

@@ -25,7 +25,7 @@ def get_upstream_project(recipe):
         except _Unsupported:
             pass
 
-    logger.warn("%s: unsupported upstream", recipe.name)
+    logger.debug("%s: unsupported upstream", recipe.name)
     return UnsupportedProject(recipe, conanfile_class)
 
 
