@@ -45,6 +45,9 @@ def main():
         default=str(10 * os.cpu_count()),
         help="Number of parallel processes.",
     )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Don't update the issue."
+    )
     args = parser.parse_args()
 
     if not args.cci:
@@ -91,7 +94,11 @@ def main():
         ]
     )
 
-    ok = update_issue(owner, repo, issue_number, args.github_token, text)
+    print(text)
+    if not args.dry_run:
+        ok = update_issue(owner, repo, issue_number, args.github_token, text)
+    else:
+        ok = True
     sys.exit(0 if ok else 1)
 
 
