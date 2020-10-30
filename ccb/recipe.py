@@ -91,18 +91,3 @@ class Recipe:
 
         with open(conandata_path, "w") as fil:
             yaml.dump(conandata, fil)
-
-    def test(self, version):
-        assert isinstance(version, Version)
-
-        version_folder_path = os.path.join(self.path, self.versions_folders[version])
-
-        env = os.environ.copy()
-        env["CONAN_HOOK_ERROR_LEVEL"] = "40"
-
-        subprocess.check_output(
-            ["conan", "create", ".", f"{self.name}/{version.fixed}@"],
-            env=env,
-            cwd=version_folder_path,
-            stderr=subprocess.STDOUT,
-        )

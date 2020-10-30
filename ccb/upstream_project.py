@@ -77,11 +77,14 @@ class GitProject(UpstreamProject):
 
     @cached_property
     def versions(self):
+        logger.debug("%s: fetching tags...", self.recipe.name)
         git_output = subprocess.check_output(
             ["git", "ls-remote", "-t", self.git_url]
         ).decode()
+
         tags = [ref.replace("refs/tags/", "") for ref in git_output.split()[1::2]]
-        logger.info(f"Found: {tags}")
+        tags = list(set(tag[:-3] if tag.endswith("^{}") else tag for tag in tags))
+        logger.debug("%s: found tags: %s", self.recipe.name, tags)
 
         return tuple(Version(tag) for tag in tags)
 

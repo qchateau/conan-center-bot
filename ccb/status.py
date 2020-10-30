@@ -73,13 +73,10 @@ def print_status_table(cci_path, recipes, print_all, jobs):
     for s in status:
         if s.recipe_version.unknown or s.upstream_version.unknown:
             name_color = fg("red")
-        elif s.recipe_version == s.upstream_version:
-            name_color = fg("green")
-        elif s.recipe_version < s.upstream_version:
+        elif s.update_possible():
             name_color = fg("dark_orange")
         else:
-            # recipe version is greater than upstream, weird
-            name_color = fg("red")
+            name_color = fg("green")
 
         if not s.update_possible() and not print_all:
             continue
