@@ -1,0 +1,21 @@
+name: update_issue
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  push:
+  workflow_dispatch:
+    inputs:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.github_token }}
+  ISSUE_URL: https://github.com/qchateau/conan-center-bot/issues/1
+
+jobs:
+  update_issue:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - run: git clone https://github.com/conan-io/conan-center-index.git --depth 1
+      - run: python3 -m pip install -r requirements.txt
+      - run: python3 ./issue_updater.py "$ISSUE_URL" "$GITHUB_TOKEN" --cci conan-center-index
