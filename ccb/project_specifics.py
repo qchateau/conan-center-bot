@@ -2,7 +2,7 @@ import re
 
 # Global tag blacklist, applied to all projects
 TAGS_BLACKLIST = [
-    re.compile(r"(.*)[\.-_]?(rc|alpha|beta|pre|preview)[\.-_]?[0-9]*$", re.IGNORECASE),
+    re.compile(r"(.*)[\._-]?(rc|alpha|beta|pre|preview)[\._-]?[0-9]*$", re.IGNORECASE),
     re.compile(r"(.*)test(.*)", re.IGNORECASE),
 ]
 
