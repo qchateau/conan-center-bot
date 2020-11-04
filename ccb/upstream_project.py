@@ -39,6 +39,10 @@ class UpstreamProject(abc.ABC):
         self.recipe = recipe
         self.conanfile_class = conanfile_class
 
+    @property
+    def homepage(self) -> str:
+        return self.conanfile_class.homepage
+
     @abc.abstractproperty
     def versions(self) -> dict:
         pass

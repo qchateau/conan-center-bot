@@ -26,6 +26,7 @@ class RecipeError(RuntimeError):
 
 class Status(typing.NamedTuple):
     name: str
+    homepage: str
     recipe_version: Version
     upstream_version: Version
 
@@ -75,12 +76,14 @@ class Recipe:
         try:
             recipe_version = self.most_recent_version
             recipe_upstream_version = self.upstream.most_recent_version
+            homepage = self.upstream.homepage
         except RecipeError as exc:
             logger.debug("%s: could not find version: %s", self.name, exc)
             recipe_version = Version()
             recipe_upstream_version = Version()
+            homepage = None
 
-        return Status(self.name, recipe_version, recipe_upstream_version)
+        return Status(self.name, homepage, recipe_version, recipe_upstream_version)
 
     @lru_cache
     def conanfile_class(self, version):

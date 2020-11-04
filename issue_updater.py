@@ -85,11 +85,20 @@ def main():
             "https://github.com/qchateau/conan-center-bot "
             "to automatically generate an update.",
             "",
-            "|Name|Recipe version|Upstream version|",
-            "|----|--------------|----------------|",
+            "|Name|Recipe version|New version|Upstream version|",
+            "|----|--------------|-----------|----------------|",
         ]
         + [
-            f"|{s.name}|{s.recipe_version}|{s.upstream_version}|"
+            "|".join(
+                [
+                    "",
+                    f"[{s.name}]({s.homepage})" if s.homepage else f"{s.name}",
+                    f"{s.recipe_version}",
+                    f"{s.upstream_version.fixed}",
+                    f"{s.upstream_version}",
+                    "",
+                ]
+            )
             for s in sorted(updatable, key=lambda s: s.name)
         ]
     )
