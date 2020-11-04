@@ -33,6 +33,7 @@ class Status(typing.NamedTuple):
         return (
             not self.upstream_version.unknown
             and not self.recipe_version.unknown
+            and self.upstream_version.is_date == self.recipe_version.is_date
             and self.upstream_version > self.recipe_version
         )
 
@@ -40,6 +41,7 @@ class Status(typing.NamedTuple):
         return (
             not self.upstream_version.unknown
             and not self.recipe_version.unknown
+            and self.upstream_version.is_date == self.recipe_version.is_date
             and self.upstream_version <= self.recipe_version
         )
 

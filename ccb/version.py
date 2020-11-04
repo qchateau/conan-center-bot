@@ -1,9 +1,10 @@
 import re
 import functools
 
-VERSION_RE = re.compile(r"[0-9]+\.[0-9\.]+")
-VERSION_DASH_RE = re.compile(r"[0-9]+-[0-9-]+")
-VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+_[0-9_]+")
+VERSION_DATE_RE = re.compile(r"[0-9]{4}[\.-_]?[0-9]{2}[\.-_]?[0-9]{2}")
+VERSION_RE = re.compile(r"[0-9]+(\.[0-9]+)+")
+VERSION_DASH_RE = re.compile(r"[0-9]+(-[0-9]+)+")
+VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+(_[0-9]+)+")
 
 
 @functools.total_ordering
@@ -14,6 +15,11 @@ class Version:
         self.original = version
         self.fixed = _fix_version(version)
         self.to_numeric = _to_numeric(self.fixed)
+        self.is_date = bool(
+            VERSION_DATE_RE.search(
+                self.fixed if self.fixed != self.UNKNOWN else self.original
+            )
+        )
 
     @property
     def unknown(self):
@@ -32,6 +38,9 @@ class Version:
             return False
         if self.to_numeric is None:
             return True
+        if self.is_date != other.is_date:
+            # consider dates as old versions to avoid false positive
+            return self.is_date
         return self.to_numeric < other.to_numeric
 
     def __str__(self):
@@ -56,7 +65,7 @@ def _fix_version(version):
     if match:
         return match.group(0).replace("_", ".")
 
-    return version
+    return Version.UNKNOWN
 
 
 def _to_numeric(version):

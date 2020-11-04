@@ -45,8 +45,8 @@ def print_status_json(cci_path, recipes, print_all, jobs):
 
 def print_status_table(cci_path, recipes, print_all, jobs):
     status = get_status(cci_path, recipes, jobs)
-    table_data = [["Name", "Recipe version", "Upstream version"]]
-    for s in status:
+    table_data = [["Name", "Recipe version", "New version", "Upstream version"]]
+    for s in sorted(status, key=lambda r: r.name):
         if s.recipe_version.unknown or s.upstream_version.unknown:
             name_color = fg("red")
         elif s.update_possible():
@@ -64,6 +64,7 @@ def print_status_table(cci_path, recipes, print_all, jobs):
             [
                 stylize(s.name, name_color),
                 stylize(s.recipe_version, rv_color),
+                stylize(s.upstream_version.fixed, uv_color),
                 stylize(s.upstream_version, uv_color),
             ]
         )

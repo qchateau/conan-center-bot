@@ -8,6 +8,11 @@ import subprocess
 from functools import cached_property, lru_cache
 
 from .version import Version
+from .project_specifics import (
+    TAGS_BLACKLIST,
+    PROJECT_TAGS_BLACKLIST,
+    PROJECT_TAGS_WHITELIST,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +79,8 @@ class GitProject(UpstreamProject):
     def __init__(self, recipe, conanfile_class, git_url):
         super().__init__(recipe, conanfile_class)
         self.git_url = git_url
+        self.whitelist = PROJECT_TAGS_WHITELIST.get(recipe.name, [])
+        self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
 
     @cached_property
     def versions(self):
@@ -86,13 +93,48 @@ class GitProject(UpstreamProject):
         tags = list(set(tag[:-3] if tag.endswith("^{}") else tag for tag in tags))
         logger.debug("%s: found tags: %s", self.recipe.name, tags)
 
-        return tuple(Version(tag) for tag in tags)
+        valid_tags = self._filter_tags(tags)
+        logger.debug(
+            "%s: ignored %s tags", self.recipe.name, len(tags) - len(valid_tags)
+        )
+
+        return tuple(Version(tag) for tag in valid_tags)
 
     @property
     def most_recent_version(self):
         if not self.versions:
             return Version()
         return sorted(self.versions)[-1]
+
+    def _filter_tags(self, tags):
+        valid_tags = list()
+        if self.whitelist:
+            for tag in tags:
+                if any(regex.match(tag) for regex in self.whitelist):
+                    valid_tags.append(tag)
+                else:
+                    logger.debug(
+                        "%s: tag %s ignored because it does not match any of %s",
+                        self.recipe.name,
+                        tag,
+                        (regex.pattern for regex in self.whitelist),
+                    )
+        else:
+            for tag in tags:
+                ignored = False
+                for regex in self.blacklist:
+                    if regex.match(tag):
+                        ignored = True
+                        logger.debug(
+                            "%s: tag %s ignored because it matches regex %s",
+                            self.recipe.name,
+                            tag,
+                            regex.pattern,
+                        )
+                        break
+                if not ignored:
+                    valid_tags.append(tag)
+        return valid_tags
 
 
 class GithubProject(GitProject):
