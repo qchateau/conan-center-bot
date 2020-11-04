@@ -65,17 +65,23 @@ class Recipe:
         return get_upstream_project(self)
 
     @property
+    def versions(self):
+        return [Version(v) for v in self.config()["versions"].keys()]
+
+    @property
     def versions_folders(self):
         return {Version(k): v["folder"] for k, v in self.config()["versions"].items()}
 
     @property
     def most_recent_version(self):
-        return sorted(self.versions_folders.keys())[-1]
+        return sorted(self.versions)[-1]
 
-    def status(self):
+    def status(self, recipe_version=None, upstream_version=None):
         try:
-            recipe_version = self.most_recent_version
-            recipe_upstream_version = self.upstream.most_recent_version
+            recipe_version = recipe_version or self.most_recent_version
+            recipe_upstream_version = (
+                upstream_version or self.upstream.most_recent_version
+            )
             homepage = self.upstream.homepage
         except RecipeError as exc:
             logger.debug("%s: could not find version: %s", self.name, exc)

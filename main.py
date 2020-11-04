@@ -38,6 +38,8 @@ def update(args):
     return update_recipes(
         cci_path=args.cci,
         recipes=args.recipe,
+        choose_version=args.choose_version,
+        folder=args.folder,
         run_test=not args.no_test,
         push=args.push,
         force=args.force,
@@ -79,6 +81,7 @@ def main():
     parser.set_defaults(func=lambda args: bad_command(args, parser))
     subparsers = parser.add_subparsers()
 
+    # Status
     parser_status = add_subparser(
         subparsers, "status", status, help="Display the status of recipes"
     )
@@ -105,6 +108,7 @@ def main():
         help="Number of parallel processes.",
     )
 
+    # Update
     parser_update = add_subparser(
         subparsers, "update", update, help="Auto-update a list of recipes"
     )
@@ -118,6 +122,15 @@ def main():
         "-f",
         action="store_true",
         help="Overwrite the branch if it exists, force push if the remote branch exists.",
+    )
+    parser_update.add_argument(
+        "--choose-version",
+        action="store_true",
+        help="Choose which upstream version to use (defaults to the latest)",
+    )
+    parser_update.add_argument(
+        "--folder",
+        help="Choose which recipe folder to use (default to the latest)",
     )
     parser_update.add_argument(
         "--push", action="store_true", help="Push the new branch to origin"

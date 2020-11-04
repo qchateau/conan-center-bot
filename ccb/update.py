@@ -114,20 +114,55 @@ def test_recipe(recipe, folder, version_str):
         raise _Failure("test failed")
 
 
-def update_one_recipe(cci_path, recipe_name, run_test, push, force):
-    recipe = Recipe(cci_path, recipe_name)
+def _get_most_recent_upstream_version(recipe):
+    status = recipe.status()
 
-    upstream_version = recipe.upstream.most_recent_version
-    if upstream_version.unknown:
-        raise _Failure("upstream version is unknown")
-    conan_version = upstream_version.fixed
-
-    if recipe.status().up_to_date():
+    if status.up_to_date():
         raise _Failure("recipe is up-to-date")
 
-    if not recipe.status().update_possible():
+    if not status.update_possible():
         raise _Failure("update is not possible")
 
+    upstream_version = status.upstream_version
+    if upstream_version.unknown:
+        raise _Failure("upstream version is unknown")
+    return upstream_version
+
+
+def _get_user_choice_upstream_version(recipe):
+    recipe_versions_fixed = [v.fixed for v in recipe.versions]
+    versions = list(
+        sorted(
+            v for v in recipe.upstream.versions if v.fixed not in recipe_versions_fixed
+        )
+    )
+    if not versions:
+        raise _Failure("update is not possible")
+
+    print("Choose an upstream version:")
+    for i, v in enumerate(versions):
+        print(f"{i:3d}) {v}")
+
+    upstream_version = None
+    while upstream_version is None:
+        try:
+            upstream_version = versions[int(input("Choice: "))]
+        except (ValueError, KeyError):
+            pass
+    return upstream_version
+
+
+def update_one_recipe(
+    cci_path, recipe_name, choose_version, folder, run_test, push, force
+):
+    recipe = Recipe(cci_path, recipe_name)
+
+    if choose_version:
+        upstream_version = _get_user_choice_upstream_version(recipe)
+    else:
+        upstream_version = _get_most_recent_upstream_version(recipe)
+
+    conan_version = upstream_version.fixed
     branch_name = f"{recipe.name}-{conan_version}"
     if branch_exists(recipe, branch_name):
         if not force:
@@ -138,7 +173,7 @@ def update_one_recipe(cci_path, recipe_name, run_test, push, force):
             raise _Failure(f"branch '{branch_name}' already exists")
         remove_branch(recipe, branch_name)
 
-    folder = recipe.versions_folders[recipe.most_recent_version]
+    folder = folder or recipe.versions_folders[recipe.most_recent_version]
 
     logger.info(
         "%s: adding version %s to folder %s in branch %s from upstream version %s",
@@ -173,11 +208,13 @@ def update_one_recipe(cci_path, recipe_name, run_test, push, force):
     )
 
 
-def update_recipes(cci_path, recipes, run_test, push, force):
+def update_recipes(cci_path, recipes, choose_version, folder, run_test, push, force):
     ok = True
     for recipe in recipes:
         try:
-            update_one_recipe(cci_path, recipe, run_test, push, force)
+            update_one_recipe(
+                cci_path, recipe, choose_version, folder, run_test, push, force
+            )
         except (_Failure, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
             ok = False
