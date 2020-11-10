@@ -56,7 +56,6 @@ class _CciInterface:
         lib_prs = dict()
         for pr in prs:
             match = PR_REGEX.search(pr.get("body", ""))
-            print(pr.get("body", ""))
             if not match:
                 continue
             name = match.group(1)

@@ -10,6 +10,10 @@ from .worktree import RecipeInWorktree
 logger = logging.getLogger(__name__)
 
 
+class _Skip(RuntimeError):
+    pass
+
+
 class _Failure(RuntimeError):
     pass
 
@@ -118,7 +122,7 @@ def _get_most_recent_upstream_version(recipe):
     status = recipe.status()
 
     if status.up_to_date():
-        raise _Failure("recipe is up-to-date")
+        raise _Skip("recipe is up-to-date")
 
     if not status.update_possible():
         raise _Failure("update is not possible")
@@ -156,6 +160,8 @@ def update_one_recipe(
     cci_path, recipe_name, choose_version, folder, run_test, push, force
 ):
     recipe = Recipe(cci_path, recipe_name)
+    if getattr(recipe.conanfile_class, "deprecated", False):
+        raise _Skip("recipe is deprecated")
 
     if choose_version:
         upstream_version = _get_user_choice_upstream_version(recipe)
@@ -215,6 +221,8 @@ def update_recipes(cci_path, recipes, choose_version, folder, run_test, push, fo
             update_one_recipe(
                 cci_path, recipe, choose_version, folder, run_test, push, force
             )
+        except _Skip:
+            logger.info("%s: skipped (%s)", recipe, str(exc))
         except (_Failure, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
             ok = False

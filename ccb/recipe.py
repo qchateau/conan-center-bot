@@ -30,6 +30,7 @@ class Status(typing.NamedTuple):
     homepage: str
     recipe_version: Version
     upstream_version: Version
+    deprecated: bool
 
     def update_possible(self):
         return (
@@ -92,13 +93,23 @@ class Recipe:
                 upstream_version or self.upstream.most_recent_version
             )
             homepage = self.upstream.homepage
+            deprecated = getattr(
+                self.conanfile_class(recipe_version), "deprecated", False
+            )
         except RecipeError as exc:
             logger.debug("%s: could not find version: %s", self.name, exc)
             recipe_version = Version()
             recipe_upstream_version = Version()
             homepage = None
+            deprecated = None
 
-        return Status(self.name, homepage, recipe_version, recipe_upstream_version)
+        return Status(
+            self.name,
+            homepage,
+            recipe_version,
+            recipe_upstream_version,
+            deprecated,
+        )
 
     @lru_cache
     def conanfile_class(self, version):

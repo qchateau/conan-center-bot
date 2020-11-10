@@ -59,15 +59,18 @@ def print_status_table(cci_path, recipes, print_all, jobs):
         ["Name", "Recipe version", "New version", "Upstream version", "Pending PR"]
     ]
     for s in sorted(status, key=lambda r: r.name):
+        if not s.update_possible() and not print_all:
+            continue
+
+        if s.deprecated:
+            continue
+
         if s.recipe_version.unknown or s.upstream_version.unknown:
             name_color = fg("red")
         elif s.update_possible():
             name_color = fg("dark_orange")
         else:
             name_color = fg("green")
-
-        if not s.update_possible() and not print_all:
-            continue
 
         pr = s.pr_opened()
         pr_text = "Yes" if pr else "No"
@@ -95,7 +98,7 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
     status = get_status(cci_path, recipes, jobs)
-    updatable = [s for s in status if s.update_possible()]
+    updatable = [s for s in status if s.update_possible() and not s.deprecated]
     duration = time.time() - t0
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
