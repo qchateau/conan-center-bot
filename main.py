@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import re
 import sys
 import argparse
 import logging
@@ -41,17 +40,9 @@ def cmd_update(args):
 
 
 def cmd_update_status_issue(args):
-    ISSUE_URL_RE = re.compile(r"github.com/([^/]+)/([^/]+)/issues/([0-9]+)")
-    match = ISSUE_URL_RE.search(args.issue_url)
-    if not match:
-        print("Bad issue URL")
-        return 1
-    owner, repo, issue_number = match.groups()
     return update_status_issue(
         cci_path=args.cci,
-        owner=owner,
-        repo=repo,
-        issue_number=issue_number,
+        issue_url_list=args.issue_url,
         jobs=int(args.jobs),
         dry_run=args.dry_run,
     )
@@ -153,7 +144,7 @@ def main():
         cmd_update_status_issue,
         help="Update the status issue",
     )
-    parser_uis.add_argument("issue_url", help="URL of the issue to update")
+    parser_uis.add_argument("issue_url", nargs="+", help="URL of the issue to update")
     parser_uis.add_argument(
         "--jobs",
         "-j",

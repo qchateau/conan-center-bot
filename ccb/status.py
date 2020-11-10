@@ -1,3 +1,4 @@
+import re
 import json
 import time
 import logging
@@ -12,6 +13,7 @@ from .recipe import get_recipes_list, Recipe
 from .version import Version
 from .github import get_github_token
 
+ISSUE_URL_RE = re.compile(r"github.com/([^/]+)/([^/]+)/issues/([0-9]+)")
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +32,13 @@ def get_status(cci_path, recipes, jobs):
         return [f.get() for f in status_futures]
 
 
-def update_issue(owner, repo, issue_number, content):
+def update_issue(issue_url, content):
+    match = ISSUE_URL_RE.search(issue_url)
+    if not match:
+        logger.error(f"update failed: bad issue URL")
+        return False
+
+    owner, repo, issue_number = match.groups()
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}"
     github_token = get_github_token()
     headers = {"Accept": "application/vnd.github.v3+json"}
@@ -83,7 +91,7 @@ def print_status_table(cci_path, recipes, print_all, jobs):
     return 0
 
 
-def update_status_issue(cci_path, owner, repo, issue_number, jobs, dry_run):
+def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
     status = get_status(cci_path, recipes, jobs)
@@ -126,7 +134,9 @@ def update_status_issue(cci_path, owner, repo, issue_number, jobs, dry_run):
 
     print(text)
     if not dry_run:
-        ok = update_issue(owner, repo, issue_number, text)
+        ok = True
+        for issue_url in issue_url_list:
+            ok = update_issue(issue_url, text) and ok
     else:
         ok = True
 
