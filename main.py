@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import sys
 import argparse
 import logging
 
 from ccb.recipe import get_recipes_list
-from ccb.status import print_status_table, print_status_json
+from ccb.status import print_status_table, update_status_issue
 from ccb.update import update_recipes
+from ccb.github import set_github_token
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
 
@@ -17,24 +19,16 @@ def bad_command(args, parser):
     return 1
 
 
-def status(args):
-    if args.json:
-        return print_status_json(
-            cci_path=args.cci,
-            recipes=args.recipe,
-            print_all=args.all,
-            jobs=int(args.jobs),
-        )
-    else:
-        return print_status_table(
-            cci_path=args.cci,
-            recipes=args.recipe,
-            print_all=args.all,
-            jobs=int(args.jobs),
-        )
+def cmd_status(args):
+    return print_status_table(
+        cci_path=args.cci,
+        recipes=args.recipe,
+        print_all=args.all,
+        jobs=int(args.jobs),
+    )
 
 
-def update(args):
+def cmd_update(args):
     return update_recipes(
         cci_path=args.cci,
         recipes=args.recipe,
@@ -43,6 +37,23 @@ def update(args):
         run_test=not args.no_test,
         push=args.push,
         force=args.force,
+    )
+
+
+def cmd_update_status_issue(args):
+    ISSUE_URL_RE = re.compile(r"github.com/([^/]+)/([^/]+)/issues/([0-9]+)")
+    match = ISSUE_URL_RE.search(args.issue_url)
+    if not match:
+        print("Bad issue URL")
+        return 1
+    owner, repo, issue_number = match.groups()
+    return update_status_issue(
+        cci_path=args.cci,
+        owner=owner,
+        repo=repo,
+        issue_number=issue_number,
+        jobs=int(args.jobs),
+        dry_run=args.dry_run,
     )
 
 
@@ -71,6 +82,7 @@ def add_subparser(subparsers, name, function, help):
         "--cci",
         help="Path to the conan-center-index repository. Defaults to '../conan-center-index'",
     )
+    subparser.add_argument("--github-token", help="Github authentication token")
 
     subparser.set_defaults(func=function)
     return subparser
@@ -83,7 +95,7 @@ def main():
 
     # Status
     parser_status = add_subparser(
-        subparsers, "status", status, help="Display the status of recipes"
+        subparsers, "status", cmd_status, help="Display the status of recipes"
     )
     parser_status.add_argument(
         "--all",
@@ -97,11 +109,6 @@ def main():
         help="Restrict the recipes status to the ones given as arguments.",
     )
     parser_status.add_argument(
-        "--json",
-        action="store_true",
-        help="Print a JSON instead of a human-readable output.",
-    )
-    parser_status.add_argument(
         "--jobs",
         "-j",
         default=str(10 * os.cpu_count()),
@@ -110,7 +117,7 @@ def main():
 
     # Update
     parser_update = add_subparser(
-        subparsers, "update", update, help="Auto-update a list of recipes"
+        subparsers, "update", cmd_update, help="Auto-update a list of recipes"
     )
     parser_update.add_argument(
         "recipe",
@@ -139,7 +146,28 @@ def main():
         "--no-test", action="store_true", help="Do not test the updated recipe"
     )
 
+    # Update status issue
+    parser_uis = add_subparser(
+        subparsers,
+        "update-status-issue",
+        cmd_update_status_issue,
+        help="Update the status issue",
+    )
+    parser_uis.add_argument("issue_url", help="URL of the issue to update")
+    parser_uis.add_argument(
+        "--jobs",
+        "-j",
+        default=str(10 * os.cpu_count()),
+        help="Number of parallel processes.",
+    )
+    parser_uis.add_argument(
+        "--dry-run", action="store_true", help="Don't update the issue."
+    )
+
     args = parser.parse_args()
+
+    if args.github_token:
+        set_github_token(args.github_token)
 
     configure_logging(args)
 
@@ -151,7 +179,7 @@ def main():
         print(f"CCI repository not found at {args.cci}")
         sys.exit(1)
 
-    if not args.recipe:
+    if not hasattr(args, "recipe") or not args.recipe:
         args.recipe = get_recipes_list(args.cci)
 
     try:
