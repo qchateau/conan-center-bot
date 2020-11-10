@@ -1,3 +1,4 @@
+import os
 from setuptools import setup
 
 
@@ -9,9 +10,10 @@ def get_requires(filename):
                 requirements.append(line)
     return requirements
 
+
 setup(
     name="conan-center-bot",
-    version="0.0.1",
+    version=os.environ.get("CCB_VERSION", "0.0.0"),
     license="GPLv3",
     packages=["ccb"],
     entry_points={

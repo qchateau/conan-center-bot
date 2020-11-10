@@ -14,20 +14,50 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
-      - run: git clone https://github.com/conan-io/conan-center-index.git --depth 1
-      - run: python3 -m pip install -r requirements.txt
 
-      - if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Clone CCI
+        run: git clone https://github.com/conan-io/conan-center-index.git --depth 1
+
+      - name: Setup python and environment
+        run: |
+          python3 -m venv .venv && source .venv/bin/activate
+          python -m pip install -r requirements.txt
+          python -m pip install twine
+
+      - name: Package tagged CCB
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        run: |
+          export CCB_VERSION=${GITHUB_REF:10}
+          python setup.py sdist
+
+      - name: Package dev CCB
+        if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags')
+        run: |
+          python setup.py sdist
+
+      - name: Install CCB
+        run: python -m pip install .
+
+      - name: Update CCI status issues
+        if: ${{ github.ref == 'refs/heads/master' }}
         run: >-
-          python3 ./main.py update-status-issue
+          python -m ccb update-status-issue
           --cci conan-center-index
           --github-token "$GITHUB_TOKEN"
           https://github.com/qchateau/conan-center-bot/issues/1
           https://github.com/conan-io/conan-center-index/issues/3470
 
-      - if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Update CCI status dev issue
+        if: ${{ github.ref != 'refs/heads/master' }}
         run: >-
-          python3 ./main.py update-status-issue
+          python -m ccb update-status-issue
           --cci conan-center-index
           --github-token "$GITHUB_TOKEN"
           https://github.com/qchateau/conan-center-bot/issues/4
+
+      - name: Publish package
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.pypi_password }}
