@@ -1,47 +1,25 @@
-# conan-center-bot
+# Conan Center Bot
 
-This is a script to help update recipes in conan-center-index.
-Currently is only supports updating recipes that use GitHub.
+This is a library to help update recipes in conan-center-index.
 
-## How does it work
+The library will scan a conan-center-index repository as well as
+all recipes's upstream to try to find which recipes can be updated.
 
-```
-usage: main.py [-h] {status,update} ...
+It can then either generates the list of updatable recipes, or
+automatically update a recipe to the latest upstream version.
 
-positional arguments:
-  {status,update}
-    status         Display the status of recipes
-    update         Auto-update a list of recipes
+This library is used to keep https://github.com/conan-io/conan-center-index/issues/3470
+and https://github.com/qchateau/conan-center-bot/issues/1 up to date.
 
-optional arguments:
-  -h, --help       show this help message and exit
-```
+## How to use it
 
-The command will try to locate the most recent version in CCI, and the most recent version in GitHub.
-
-### Status
+Use the help, it will be more up to date than this README !
 
 ```
-usage: main.py status [-h] [--verbose] [--cci CCI] [--all] [--recipe RECIPE [RECIPE ...]] [--json] [--jobs JOBS]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --verbose, -v         Verbosity level
-  --cci CCI             Path to the conan-center-index repository. Defaults to '../conan-center-index'
-  --all, -a             Display all recipes. By default only updatable recipes are displayed.
-  --recipe RECIPE [RECIPE ...]
-                        Restrict the recipes status to the ones given as arguments.
-  --json                Print a JSON instead of a human-readable output.
-  --jobs JOBS, -j JOBS  Number of parallel processes.
+python -m ccb -h
 ```
 
-To display a list of all updatable recipe in the CCI repository, run
-
-```bash
-python3 main.py status --cci <path-to-cci>
-```
-
-### Update
+### Update a recipe
 
 ```
 usage: main.py update [-h] [--verbose] [--cci CCI] [--force] [--push] [--no-test] recipe [recipe ...]
