@@ -169,7 +169,7 @@ def main():
     configure_logging(args)
 
     if not args.cci:
-        args.cci = os.path.join(ROOT, "..", "conan-center-index")
+        args.cci = os.path.join(ROOT, "..", "..", "conan-center-index")
 
     args.cci = os.path.abspath(args.cci)
     if not os.path.exists(args.cci):
