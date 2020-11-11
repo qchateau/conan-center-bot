@@ -48,6 +48,13 @@ class Status(typing.NamedTuple):
             and self.upstream_version <= self.recipe_version
         )
 
+    def inconsistent_versioning(self):
+        return (
+            not self.upstream_version.unknown
+            and not self.recipe_version.unknown
+            and self.upstream_version.is_date != self.recipe_version.is_date
+        )
+
     def pr_opened(self):
         pr = cci_interface.libraries_pull_requests().get(self.name)
         if pr is None:

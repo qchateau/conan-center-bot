@@ -100,7 +100,9 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
     status = get_status(cci_path, recipes, jobs)
-    updatable = [s for s in status if s.update_possible() and not s.deprecated]
+    status = [s for s in status if not s.deprecated]
+    updatable = [s for s in status if s.update_possible()]
+    inconsistent_version = [s for s in status if s.inconsistent_versioning()]
     duration = time.time() - t0
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
@@ -134,6 +136,26 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
                 ]
             )
             for s in sorted(updatable, key=lambda s: s.name)
+        ]
+        + [
+            "",
+            "The following recipes versions are not consistent with the upstream versioning scheme.",
+            "Most of the times it means the current recipe version is not related to any upstream tag.",
+            "",
+            "|Name|Current recipe version|Upstream version|",
+            "|----|----------------------|----------------|",
+        ]
+        + [
+            "|".join(
+                [
+                    "",
+                    f"[{s.name}]({s.homepage})" if s.homepage else f"{s.name}",
+                    f"{s.recipe_version}",
+                    f"{s.upstream_version}",
+                    "",
+                ]
+            )
+            for s in sorted(inconsistent_version, key=lambda s: s.name)
         ]
     )
 
