@@ -16,6 +16,11 @@ PROJECT_TAGS_BLACKLIST = {
     "lerc": [re.compile(r"^runtimecore_(.*)")],
     "xtensor": [re.compile(r"(.*)-binder[0-9]*$")],
     "libunwind": [re.compile(r"^4\.0\.(6|7|9|10)$")],
+    "ctre": [re.compile(r"^2017$")],
+    "lz4": [re.compile(r"^r1[0-9][0-9]$")],
+    "nng": [re.compile(r"^r12$")],
+    "miniz": [re.compile(r"^v1[0-9][0-9]$")],
+    "libusb": [re.compile(r"^r[0-9]{3}$")],
 }
 
 # Project-based whitelist, a blacklist must not be defined
