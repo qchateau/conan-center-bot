@@ -1,9 +1,10 @@
 import re
 import functools
 
-VERSION_DATE_RE = re.compile(r"[0-9]{4}[\.-_]?[0-9]{2}[\.-_]?[0-9]{2}")
+VERSION_DATE_RE = re.compile(r"([0-9]{4})[\.-_]?([0-9]{2})[\.-_]?([0-9]{2})")
 VERSION_RE = re.compile(r"[0-9]+(\.[0-9]+)+")
 VERSION_DASH_RE = re.compile(r"[0-9]+(-[0-9]+)+")
+VERSION_COUNTER_RE = re.compile(r"^[rv]?([0-9]+)$")
 VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+(_[0-9]+)+")
 
 
@@ -64,6 +65,14 @@ def _fix_version(version):
     match = VERSION_UNDERSCORE_RE.search(version)
     if match:
         return match.group(0).replace("_", ".")
+
+    match = VERSION_DATE_RE.search(version)
+    if match:
+        return "".join(match.groups())
+
+    match = VERSION_COUNTER_RE.search(version)
+    if match:
+        return match.group(1)
 
     return Version.UNKNOWN
 

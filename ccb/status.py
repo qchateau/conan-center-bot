@@ -66,17 +66,19 @@ def print_status_table(cci_path, recipes, print_all, jobs):
             continue
 
         if s.recipe_version.unknown or s.upstream_version.unknown:
-            name_color = fg("red")
+            name_color = fg("dark_gray")
         elif s.update_possible():
             name_color = fg("dark_orange")
-        else:
+        elif s.up_to_date():
             name_color = fg("green")
+        else:
+            name_color = fg("red")
 
         pr = s.pr_opened()
         pr_text = "Yes" if pr else "No"
 
-        rv_color = fg("green") if not s.recipe_version.unknown else fg("red")
-        uv_color = fg("green") if not s.upstream_version.unknown else fg("red")
+        rv_color = fg("green") if not s.recipe_version.unknown else fg("dark_gray")
+        uv_color = fg("green") if not s.upstream_version.unknown else fg("dark_gray")
         pr_color = fg("green") if pr else fg("dark_orange")
 
         table_data.append(
