@@ -81,7 +81,13 @@ def add_subparser(subparsers, name, function, help):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.set_defaults(func=lambda args: bad_command(args, parser))
+    parser.set_defaults(
+        func=lambda args: bad_command(args, parser),
+        cci=None,
+        verbose=False,
+        quiet=False,
+        github_token=None,
+    )
     subparsers = parser.add_subparsers()
 
     # Status
