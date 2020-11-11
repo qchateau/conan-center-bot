@@ -10,8 +10,6 @@ from ccb.status import print_status_table, update_status_issue
 from ccb.update import update_recipes
 from ccb.github import set_github_token
 
-ROOT = os.path.dirname(os.path.realpath(__file__))
-
 
 def bad_command(args, parser):
     parser.print_usage()
@@ -169,7 +167,7 @@ def main():
     configure_logging(args)
 
     if not args.cci:
-        args.cci = os.path.join(ROOT, "..", "..", "conan-center-index")
+        args.cci = os.path.realpath(os.path.join("..", "conan-center-index"))
 
     args.cci = os.path.abspath(args.cci)
     if not os.path.exists(args.cci):
