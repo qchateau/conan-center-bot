@@ -221,7 +221,7 @@ def update_recipes(cci_path, recipes, choose_version, folder, run_test, push, fo
             update_one_recipe(
                 cci_path, recipe, choose_version, folder, run_test, push, force
             )
-        except _Skip:
+        except _Skip as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
         except (_Failure, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
