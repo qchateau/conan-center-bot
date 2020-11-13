@@ -1,0 +1,43 @@
+name: package
+
+on: push
+
+env:
+  GITHUB_TOKEN: ${{ secrets.issue_github_token }}
+
+jobs:
+  package:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Edit version for release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        run: |
+          CCB_VERSION=${GITHUB_REF:10}
+          echo "Version: $CCB_VERSION"
+          sed -i "s/\"0.0.0\"/\"$CCB_VERSION\"/" ccb/_version.py
+
+      - name: Update dev issue
+        run: |
+          git clone https://github.com/conan-io/conan-center-index.git --depth 1
+          python3 -m pip install .
+          python3 -m ccb update-status-issue \
+            --cci conan-center-index \
+            --github-token "$GITHUB_TOKEN" \
+            https://github.com/qchateau/conan-center-bot/issues/4
+
+      - name: Package
+        run: python3 setup.py sdist
+
+      - name: Install twine
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        run: python3 -m pip install twine
+
+      - name: Publish package
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.pypi_password }}
