@@ -2,18 +2,17 @@ import os
 from setuptools import setup
 
 
-def get_requires(filename):
-    requirements = []
-    with open(filename, "rt") as req_file:
-        for line in req_file.read().splitlines():
-            if not line.strip().startswith("#"):
-                requirements.append(line)
-    return requirements
+def get_version():
+    THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+    main_ns = {}
+    with open(os.path.join(THIS_DIR, "ccb/_version.py")) as ver_file:
+        exec(ver_file.read(), main_ns)
+    return main_ns["__version__"]
 
 
 setup(
     name="conan-center-bot",
-    version=os.environ.get("CCB_VERSION", "0.0.0"),
+    version=get_version(),
     license="GPLv3",
     packages=["ccb"],
     entry_points={
