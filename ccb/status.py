@@ -9,7 +9,6 @@ from terminaltables import AsciiTable
 from colored import fg, stylize
 
 from .recipe import get_recipes_list, Recipe
-from .version import Version
 from .github import get_github_token
 from . import __version__
 
@@ -35,7 +34,7 @@ def get_status(cci_path, recipes, jobs):
 def update_issue(issue_url, content):
     match = ISSUE_URL_RE.search(issue_url)
     if not match:
-        logger.error(f"update failed: bad issue URL")
+        logger.error("update failed: bad issue URL")
         return False
 
     owner, repo, issue_number = match.groups()

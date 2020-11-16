@@ -3,7 +3,6 @@ import yaml
 import typing
 import inspect
 import logging
-import subprocess
 import importlib.util
 from functools import cached_property, lru_cache
 
@@ -11,7 +10,7 @@ from conans import ConanFile
 
 from .version import Version
 from .upstream_project import get_upstream_project
-from .cci import cci_interface, LibPullRequest
+from .cci import cci_interface
 
 
 logger = logging.getLogger(__name__)
