@@ -101,7 +101,7 @@ def test_recipe(recipe, folder, version_str):
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    if not logger.isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.INFO):
         stdout = stderr = subprocess.DEVNULL
     else:
         stdout = stderr = None
