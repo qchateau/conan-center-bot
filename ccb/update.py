@@ -198,7 +198,11 @@ def update_one_recipe(
             test_recipe(new_recipe, folder, conan_version)
 
         create_branch_and_commit(
-            new_recipe, branch_name, f"{recipe.name}: add version {conan_version}"
+            new_recipe,
+            branch_name,
+            f"{recipe.name}: add version {conan_version}\n\n"
+            "Generated and committed by conan-center-bot.\n"
+            "Visit https://github.com/qchateau/conan-center-bot",
         )
 
         if push:
