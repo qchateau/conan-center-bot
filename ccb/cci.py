@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 class LibPullRequest(typing.NamedTuple):
     library: str
     version: Version
-    pr: typing.Any
+    url: str
+    number: int
 
 
 class _CciInterface:
@@ -55,7 +56,12 @@ class _CciInterface:
         )
 
         return [
-            pr
+            LibPullRequest(
+                library=recipe_status.name,
+                version=recipe_status.upstream_version.fixed,
+                url=pr["html_url"],
+                number=pr["number"],
+            )
             for pr in self.pull_requests()
             if body_re.search(pr.get("body", ""))
             or title_re.search(pr.get("title", ""))

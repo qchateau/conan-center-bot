@@ -108,7 +108,7 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
         prs = status.prs_opened()
         if not prs:
             return "No"
-        return ", ".join([f"[#{pr['number']}]({pr['html_url']})" for pr in prs])
+        return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
     text = "\n".join(
