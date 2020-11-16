@@ -55,13 +55,8 @@ class Status(typing.NamedTuple):
             and self.upstream_version.is_date != self.recipe_version.is_date
         )
 
-    def pr_opened(self):
-        pr = cci_interface.libraries_pull_requests().get(self.name)
-        if pr is None:
-            return None
-        if pr.version == self.upstream_version or pr.version == self.recipe_version:
-            return pr.pr
-        return None
+    def prs_opened(self):
+        return cci_interface.pull_request_for(self)
 
 
 class Recipe:

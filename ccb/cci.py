@@ -6,10 +6,6 @@ import functools
 from .github import get_github_token
 from .version import Version
 
-
-PR_REGEX = re.compile(r"Specify library name and version:[\s\*]*(.*)/([^\s]+)")
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -50,18 +46,20 @@ class _CciInterface:
 
         return prs
 
-    @functools.lru_cache
-    def libraries_pull_requests(self):
-        prs = self.pull_requests()
-        lib_prs = dict()
-        for pr in prs:
-            match = PR_REGEX.search(pr.get("body", ""))
-            if not match:
-                continue
-            name = match.group(1)
-            version = Version(match.group(2))
-            lib_prs[name] = LibPullRequest(name, version, pr)
-        return lib_prs
+    def pull_request_for(self, recipe_status):
+        body_re = re.compile(
+            recipe_status.name + r"/" + recipe_status.upstream_version.fixed
+        )
+        title_re = re.compile(
+            recipe_status.name + r".*" + recipe_status.upstream_version.fixed
+        )
+
+        return [
+            pr
+            for pr in self.pull_requests()
+            if body_re.search(pr.get("body", ""))
+            or title_re.search(pr.get("title", ""))
+        ]
 
 
 cci_interface = _CciInterface()

@@ -74,12 +74,12 @@ def print_status_table(cci_path, recipes, print_all, jobs):
         else:
             name_color = fg("red")
 
-        pr = s.pr_opened()
-        pr_text = "Yes" if pr else "No"
+        prs = s.prs_opened()
+        pr_text = str(len(prs))
 
         rv_color = fg("green") if not s.recipe_version.unknown else fg("dark_gray")
         uv_color = fg("green") if not s.upstream_version.unknown else fg("dark_gray")
-        pr_color = fg("green") if pr else fg("dark_orange")
+        pr_color = fg("green") if prs else fg("dark_orange")
 
         table_data.append(
             [
@@ -104,6 +104,12 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
     updatable = [s for s in status if s.update_possible()]
     inconsistent_version = [s for s in status if s.inconsistent_versioning()]
     duration = time.time() - t0
+
+    def make_pr_text(status):
+        prs = status.prs_opened()
+        if not prs:
+            return "No"
+        return ", ".join([f"[#{pr['number']}]({pr['html_url']})" for pr in prs])
 
     date = datetime.datetime.now().strftime("%d/%m/%Y")
     text = "\n".join(
@@ -135,7 +141,7 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
                     f"{s.recipe_version}",
                     f"{s.upstream_version.fixed}",
                     f"{s.upstream_version}",
-                    f"[Yes]({s.pr_opened()['html_url']})" if s.pr_opened() else "No",
+                    make_pr_text(s),
                     "",
                 ]
             )
