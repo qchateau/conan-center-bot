@@ -145,7 +145,7 @@ def update_status_issue(cci_path, issue_url_list, jobs, dry_run):
             "",
             "### Inconsistent recipes",
             "",
-            "The following recipes are not consistent with their upstream versioning scheme."
+            "The following recipes are not consistent with their upstream versioning scheme. "
             "Most of the times it means the current recipe version is not related to any upstream tag.",
             "",
             "|Name|Current recipe version|Upstream version|",
