@@ -3,7 +3,6 @@ import abc
 import hashlib
 import requests
 import logging
-import tempfile
 import subprocess
 from functools import cached_property, lru_cache
 

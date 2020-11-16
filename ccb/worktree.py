@@ -26,7 +26,7 @@ class RecipeInWorktree:
                 cwd=self.recipe.path,
             )
             return Recipe(self.tmpdir.name, self.recipe.name)
-        except:
+        except BaseException:
             self.cleanup()
             raise
 
