@@ -61,7 +61,10 @@ def update_status_issue(
     status = list(sorted(status, key=lambda s: s.name))
     updatable = [s for s in status if s.update_possible()]
     inconsistent_version = [s for s in status if s.inconsistent_versioning()]
-    unsupported_count = len(status) - len(updatable) - len(inconsistent_version)
+    up_to_date_count = len([s for s in status if s.up_to_date()])
+    unsupported_count = (
+        len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
+    )
 
     errors = dict()
     branches = dict()
@@ -119,6 +122,7 @@ def update_status_issue(
             "",
             f"* Date: {date}",
             f"* Parsed recipes: {len(recipes)}",
+            f"* Up-to-date recipes: {up_to_date_count}",
             f"* Updatable recipes: {len(updatable)}",
             f"* Inconsistent recipes: {len(inconsistent_version)}",
             f"* Unsupported recipes: {unsupported_count}",
