@@ -9,7 +9,7 @@ from ccb.recipe import get_recipes_list
 from ccb.status import print_status_table
 from ccb.update import update_recipes
 from ccb.github import set_github_token
-from ccb.actions import update_status_issue, update_full_status_issue
+from ccb.actions import update_status_issue
 
 
 def bad_command(args, parser):
@@ -41,14 +41,6 @@ def cmd_update(args):
 
 def cmd_update_status_issue(args):
     return update_status_issue(
-        cci_path=args.cci,
-        issue_url_list=args.issue_url,
-        jobs=int(args.jobs),
-    )
-
-
-def cmd_update_full_status_issue(args):
-    return update_full_status_issue(
         cci_path=args.cci,
         issue_url_list=args.issue_url,
         status_jobs=int(args.jobs),
@@ -159,21 +151,6 @@ def main():
     )
     parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
     parser_uis.add_argument(
-        "--jobs",
-        "-j",
-        default=str(10 * os.cpu_count()),
-        help="Number of parallel processes.",
-    )
-
-    # Update full status issue
-    parser_ufis = add_subparser(
-        subparsers,
-        "update-full-status-issue",
-        cmd_update_full_status_issue,
-        help="Update the full status issue",
-    )
-    parser_ufis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
-    parser_ufis.add_argument(
         "--jobs",
         "-j",
         default=str(10 * os.cpu_count()),

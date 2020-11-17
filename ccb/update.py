@@ -1,5 +1,5 @@
 import os
-import timeit
+import re
 import logging
 import subprocess
 from ruamel.yaml import YAML
@@ -34,8 +34,26 @@ class RecipeNotUpdatable(UpdateError):
 
 
 class TestFailed(UpdateError):
+    RE_ERRORS = [
+        re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
+        re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
+        re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
+    ]
+
     def __init__(self, complete_process):
-        super().__init__("test failed")
+        super().__init__("Test failed")
+        self.complete_process = complete_process
+
+    @property
+    def output(self):
+        return self.complete_process.stdout.decode()
+
+    def details(self):
+        for regex in self.RE_ERRORS:
+            match = regex.search(self.output)
+            if match:
+                return match.group(1)
+        return "no details"
 
 
 class BranchAlreadyExists(UpdateError):
@@ -239,7 +257,7 @@ def update_one_recipe(
                 False,
             )
         if not force_push:
-            raise BranchAlreadyExists(f"{push_to}/{branch_name}")
+            raise BranchAlreadyExists(branch_name)
 
     folder = folder or recipe.versions_folders[recipe.most_recent_version]
 
