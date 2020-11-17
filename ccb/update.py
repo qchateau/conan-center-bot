@@ -181,7 +181,7 @@ def update_one_recipe(
     choose_version,
     folder,
     run_test,
-    push,
+    push_to,
     force,
     allow_interaction,
 ):
@@ -196,6 +196,7 @@ def update_one_recipe(
 
     conan_version = upstream_version.fixed
     branch_name = f"{recipe.name}-{conan_version}"
+
     if branch_exists(recipe, branch_name):
         if allow_interaction and not force:
             force = yn_question(
@@ -230,23 +231,30 @@ def update_one_recipe(
             "Generated and committed by [conan-center-bot](https://github.com/qchateau/conan-center-bot)",
         )
 
-        if push:
+        if push_to:
             logger.info("%s: pushing", recipe_name)
-            push_branch(new_recipe, "origin", branch_name, force)
+            push_branch(new_recipe, push_to, branch_name, force)
 
     logger.info(
         "%s: created version %s in branch %s (%s)",
         recipe_name,
         conan_version,
         branch_name,
-        "pushed" if push else "not pushed",
+        "pushed" if push_to else "not pushed",
     )
 
     return branch_name
 
 
 def update_recipes(
-    cci_path, recipes, choose_version, folder, run_test, push, force, allow_interaction
+    cci_path,
+    recipes,
+    choose_version,
+    folder,
+    run_test,
+    push_to,
+    force,
+    allow_interaction,
 ):
     ok = True
     for recipe in recipes:
@@ -257,7 +265,7 @@ def update_recipes(
                 choose_version,
                 folder,
                 run_test,
-                push,
+                push_to,
                 force,
                 allow_interaction,
             )

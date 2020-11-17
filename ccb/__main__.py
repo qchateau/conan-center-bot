@@ -33,7 +33,7 @@ def cmd_update(args):
         choose_version=args.choose_version,
         folder=args.folder,
         run_test=not args.no_test,
-        push=args.push,
+        push_to="origin" if args.push else False,
         force=args.force,
         allow_interaction=True,
     )

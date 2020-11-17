@@ -152,7 +152,7 @@ def update_full_status_issue(
                 choose_version=False,
                 folder=None,
                 run_test=True,
-                push=True,
+                push_to="origin",
                 force=False,
                 allow_interaction=False,
             )
