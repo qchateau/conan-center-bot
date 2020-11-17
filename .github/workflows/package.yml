@@ -41,6 +41,7 @@ jobs:
           conan-center-bot update-status-issue \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
+            --force \
             https://github.com/qchateau/conan-center-bot/issues/4
 
       - name: Package

@@ -33,7 +33,7 @@ def cmd_update(args):
         choose_version=args.choose_version,
         folder=args.folder,
         run_test=not args.no_test,
-        push_to="origin" if args.push else False,
+        push_to=args.push_to,
         force=args.force,
         allow_interaction=True,
     )
@@ -43,6 +43,8 @@ def cmd_update_status_issue(args):
     return update_status_issue(
         cci_path=args.cci,
         issue_url_list=args.issue_url,
+        force=args.force,
+        push_to=args.push_to,
         status_jobs=int(args.jobs),
     )
 
@@ -135,9 +137,7 @@ def main():
         "--folder",
         help="Choose which recipe folder to use (default to the latest)",
     )
-    parser_update.add_argument(
-        "--push", action="store_true", help="Push the new branch to origin"
-    )
+    parser_update.add_argument("--push-to", help="Remote name to push new branches to")
     parser_update.add_argument(
         "--no-test", action="store_true", help="Do not test the updated recipe"
     )
@@ -150,6 +150,13 @@ def main():
         help="Update the status issue",
     )
     parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
+    parser_uis.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite the branch if it exists, force push if the remote branch exists.",
+    )
+    parser_uis.add_argument("--push-to", help="Remote name to push new branches to")
     parser_uis.add_argument(
         "--jobs",
         "-j",

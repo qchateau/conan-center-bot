@@ -50,6 +50,8 @@ def _update_issue(issue_url, content):
 def update_status_issue(
     cci_path,
     issue_url_list,
+    force,
+    push_to,
     status_jobs,
 ):
     t0 = time.time()
@@ -79,8 +81,8 @@ def update_status_issue(
                 choose_version=False,
                 folder=None,
                 run_test=True,
-                push_to="origin",
-                force=False,
+                push_to=push_to,
+                force=force,
                 allow_interaction=False,
             )
         except BranchAlreadyExists as exc:
