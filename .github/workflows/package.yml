@@ -28,7 +28,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
+          git clone https://qchateau:$GITHUB_TOKEN@github.com/conan-center-bot-testing/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -42,6 +42,7 @@ jobs:
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
             --force \
+            --push-to origin \
             https://github.com/qchateau/conan-center-bot/issues/4
 
       - name: Package

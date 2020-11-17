@@ -2,7 +2,7 @@ name: update_issue
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0/6 * * *"
   workflow_dispatch:
 
 env:
@@ -13,16 +13,25 @@ jobs:
   update_issue:
     runs-on: ubuntu-20.04
     steps:
+      - name: Setup python
+        uses: actions/setup-python@v1
+
       - name: Clone CCI
-        run: git clone https://github.com/conan-io/conan-center-index.git --depth 1
+        run: |
+          git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
+          cd conan-center-index
+          git remote add upstream https://github.com/conan-io/conan-center-index.git
+          git fetch upstream
+          git checkout upstream/master
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
 
       - name: Update CCI status issues
         run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
           python3 -m pip install conan-center-bot
           conan-center-bot update-status-issue \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
+            --push-to origin \
             https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
