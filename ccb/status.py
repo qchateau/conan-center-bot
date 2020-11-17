@@ -33,6 +33,13 @@ def print_status_table(cci_path, recipes, print_all, jobs):
     table_data = [
         ["Name", "Recipe version", "New version", "Upstream version", "Pending PR"]
     ]
+    deprecated = [s for s in status if s.deprecated]
+    update_possible = [s for s in status if s.update_possible()]
+    up_to_date = [s for s in status if s.up_to_date()]
+    inconsistent_versioning = [s for s in status if s.inconsistent_versioning()]
+    unsupported_recipe = [s for s in status if s.recipe_version.unknown]
+    unsupported_upstream = [s for s in status if s.upstream_version.unknown]
+
     for s in sorted(status, key=lambda r: r.name):
         if not s.update_possible() and not print_all:
             continue
@@ -67,5 +74,23 @@ def print_status_table(cci_path, recipes, print_all, jobs):
         )
 
     table = AsciiTable(table_data)
+
+    def print_recipe_type(name, recipes, print_homepage=False):
+        print(f"{len(recipes)} {name}")
+        if print_all:
+            for r in recipes:
+                print(
+                    f" * {r.name}"
+                    + (f" ({r.homepage})" if print_homepage and r.homepage else "")
+                )
+            print()
+
+    print_recipe_type("deprecated recipes", deprecated)
+    print_recipe_type("updatable recipes", update_possible)
+    print_recipe_type("up-to-date recipes", up_to_date)
+    print_recipe_type("inconsistent recipes", inconsistent_versioning)
+    print_recipe_type("unsupported recipes", unsupported_recipe)
+    print_recipe_type("unsupported upstream", unsupported_upstream, print_homepage=True)
+    print()
     print(table.table)
     return 0
