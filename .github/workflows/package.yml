@@ -4,11 +4,15 @@ on: push
 
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
+  PYTHONUNBUFFERED: 1
 
 jobs:
   package:
     runs-on: ubuntu-20.04
     steps:
+      - name: Setup python
+        uses: actions/setup-python@v1
+
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -19,11 +23,22 @@ jobs:
           echo "Version: $CCB_VERSION"
           sed -i "s/\"0.0.0\"/\"$CCB_VERSION\"/" ccb/_version.py
 
-      - name: Update dev issue
+      - name: Install CCB locally
+        run: python3 -m pip install .
+
+      - name: Clone CCI
         run: |
-          git clone https://github.com/conan-io/conan-center-index.git --depth 1
-          python3 -m pip install .
-          python3 -m ccb update-status-issue \
+          git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
+          cd conan-center-index
+          git remote add upstream https://github.com/conan-io/conan-center-index.git
+          git fetch upstream
+          git checkout upstream/master
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
+
+      - name: Update dev issues
+        run: |
+          conan-center-bot update-status-issue \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
             https://github.com/qchateau/conan-center-bot/issues/4

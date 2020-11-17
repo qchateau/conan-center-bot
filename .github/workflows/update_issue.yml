@@ -2,11 +2,12 @@ name: update_issue
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
+  PYTHONUNBUFFERED: 1
 
 jobs:
   update_issue:
@@ -17,7 +18,8 @@ jobs:
 
       - name: Update CCI status issues
         run: |
-          python3 -m venv .venv && source .venv/bin/activate
+          python3 -m venv .venv
+          source .venv/bin/activate
           python3 -m pip install conan-center-bot
           conan-center-bot update-status-issue \
             --cci conan-center-index \
