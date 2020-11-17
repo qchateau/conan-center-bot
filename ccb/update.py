@@ -1,27 +1,46 @@
 import os
+import time
 import yaml
 import logging
 import subprocess
 
-from .recipe import Recipe, RecipeError
+from .recipe import Recipe, RecipeError, get_recipes_list
+from .status import get_status
 from .worktree import RecipeInWorktree
 
 
 logger = logging.getLogger(__name__)
 
 
-class _Skip(RuntimeError):
+class UpdateError(RuntimeError):
     pass
 
 
-class _Failure(RuntimeError):
+class RecipeNotSupported(UpdateError):
     pass
 
 
-class _TestFailed(_Failure):
-    def __init__(self, output):
+class RecipeDeprecated(RecipeNotSupported):
+    pass
+
+
+class UpstreamNotSupported(UpdateError):
+    pass
+
+
+class RecipeNotUpdatable(UpdateError):
+    pass
+
+
+class TestFailed(UpdateError):
+    def __init__(self, complete_process):
         super().__init__("test failed")
-        self.output = output
+
+
+class BranchAlreadyExists(UpdateError):
+    def __init__(self, branch_name):
+        super().__init__(f"branch already exists: {branch_name}")
+        self.branch_name = branch_name
 
 
 def yn_question(question, default):
@@ -77,7 +96,8 @@ def push_branch(recipe, remote, branch_name, force):
 def add_version(recipe, folder, conan_version, upstream_version):
     conandata_path = os.path.join(recipe.path, folder, "conandata.yml")
     if not os.path.exists(conandata_path):
-        raise _Failure("no conandata.yml")
+        logger.error(f"conandata.yml file not found: {conandata_path}")
+        raise RecipeNotSupported("no conandata.yml")
 
     with open(conandata_path) as fil:
         conandata = yaml.load(fil, Loader=yaml.FullLoader)
@@ -101,35 +121,34 @@ def test_recipe(recipe, folder, version_str):
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    if not logger.isEnabledFor(logging.INFO):
-        stdout = stderr = subprocess.DEVNULL
-    else:
-        stdout = stderr = None
-
-    code = subprocess.call(
+    ret = subprocess.run(
         ["conan", "create", ".", f"{recipe.name}/{version_str}@"],
         env=env,
-        stdout=stdout,
-        stderr=stderr,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         cwd=version_folder_path,
     )
 
-    if code != 0:
-        raise _Failure("test failed")
+    logger.debug(ret.stdout.decode())
+
+    if ret.returncode != 0:
+        if not logger.isEnabledFor(logging.DEBUG):
+            logger.info(ret.stdout.decode())
+        raise TestFailed(ret)
 
 
 def _get_most_recent_upstream_version(recipe):
     status = recipe.status()
 
     if status.up_to_date():
-        raise _Skip("recipe is up-to-date")
+        raise RecipeNotUpdatable("recipe is up-to-date")
 
     if not status.update_possible():
-        raise _Failure("update is not possible")
+        raise RecipeNotUpdatable("update is not possible")
 
     upstream_version = status.upstream_version
     if upstream_version.unknown:
-        raise _Failure("upstream version is unknown")
+        raise UpstreamNotSupported("upstream version is unknown")
     return upstream_version
 
 
@@ -141,7 +160,7 @@ def _get_user_choice_upstream_version(recipe):
         )
     )
     if not versions:
-        raise _Failure("update is not possible")
+        raise UpstreamNotSupported("no upstream versions found")
 
     print("Choose an upstream version:")
     for i, v in enumerate(versions):
@@ -157,11 +176,18 @@ def _get_user_choice_upstream_version(recipe):
 
 
 def update_one_recipe(
-    cci_path, recipe_name, choose_version, folder, run_test, push, force
+    cci_path,
+    recipe_name,
+    choose_version,
+    folder,
+    run_test,
+    push,
+    force,
+    allow_interaction,
 ):
     recipe = Recipe(cci_path, recipe_name)
     if getattr(recipe.conanfile_class, "deprecated", False):
-        raise _Skip("recipe is deprecated")
+        raise RecipeDeprecated("recipe is deprecated")
 
     if choose_version:
         upstream_version = _get_user_choice_upstream_version(recipe)
@@ -171,12 +197,12 @@ def update_one_recipe(
     conan_version = upstream_version.fixed
     branch_name = f"{recipe.name}-{conan_version}"
     if branch_exists(recipe, branch_name):
-        if not force:
+        if allow_interaction and not force:
             force = yn_question(
                 f"Branch '{branch_name}' already exists, overwrite ?", False
             )
         if not force:
-            raise _Failure(f"branch '{branch_name}' already exists")
+            raise BranchAlreadyExists(branch_name)
         remove_branch(recipe, branch_name)
 
     folder = folder or recipe.versions_folders[recipe.most_recent_version]
@@ -201,8 +227,7 @@ def update_one_recipe(
             new_recipe,
             branch_name,
             f"{recipe.name}: add version {conan_version}\n\n"
-            "Generated and committed by conan-center-bot.\n"
-            "Visit https://github.com/qchateau/conan-center-bot",
+            "Generated and committed by [conan-center-bot](https://github.com/qchateau/conan-center-bot)",
         )
 
         if push:
@@ -217,17 +242,28 @@ def update_one_recipe(
         "pushed" if push else "not pushed",
     )
 
+    return branch_name
 
-def update_recipes(cci_path, recipes, choose_version, folder, run_test, push, force):
+
+def update_recipes(
+    cci_path, recipes, choose_version, folder, run_test, push, force, allow_interaction
+):
     ok = True
     for recipe in recipes:
         try:
             update_one_recipe(
-                cci_path, recipe, choose_version, folder, run_test, push, force
+                cci_path,
+                recipe,
+                choose_version,
+                folder,
+                run_test,
+                push,
+                force,
+                allow_interaction,
             )
-        except _Skip as exc:
+        except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
-        except (_Failure, RecipeError) as exc:
+        except (UpdateError, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
             ok = False
 
