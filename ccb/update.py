@@ -65,6 +65,22 @@ def branch_exists(recipe, branch_name):
     )
 
 
+def remote_branch_exists(recipe, branch_name, remote):
+    return (
+        subprocess.call(
+            [
+                "git",
+                "show-ref",
+                "--verify",
+                "-q",
+                f"refs/remotes/{remote}/{branch_name}",
+            ],
+            cwd=recipe.path,
+        )
+        == 0
+    )
+
+
 def create_branch_and_commit(recipe, branch_name, commit_msg):
     subprocess.check_call(["git", "checkout", "-q", "-b", branch_name], cwd=recipe.path)
     subprocess.check_call(
@@ -196,6 +212,7 @@ def update_one_recipe(
 
     conan_version = upstream_version.fixed
     branch_name = f"{recipe.name}-{conan_version}"
+    force_push = force
 
     if branch_exists(recipe, branch_name):
         if allow_interaction and not force:
@@ -205,6 +222,15 @@ def update_one_recipe(
         if not force:
             raise BranchAlreadyExists(branch_name)
         remove_branch(recipe, branch_name)
+
+    if remote_branch_exists(recipe, branch_name, push_to):
+        if allow_interaction and not force_push:
+            force_push = yn_question(
+                f"Remote branch '{push_to}/{branch_name}' already exists, overwrite ?",
+                False,
+            )
+        if not force_push:
+            raise BranchAlreadyExists(f"{push_to}/{branch_name}")
 
     folder = folder or recipe.versions_folders[recipe.most_recent_version]
 
@@ -233,7 +259,7 @@ def update_one_recipe(
 
         if push_to:
             logger.info("%s: pushing", recipe_name)
-            push_branch(new_recipe, push_to, branch_name, force)
+            push_branch(new_recipe, push_to, branch_name, force_push)
 
     logger.info(
         "%s: created version %s in branch %s (%s)",
