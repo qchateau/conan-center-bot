@@ -1,8 +1,9 @@
 import os
-import time
-import yaml
+import timeit
 import logging
 import subprocess
+from ruamel.yaml import YAML
+from ruamel.yaml.constructor import DoubleQuotedScalarString
 
 from .recipe import Recipe, RecipeError, get_recipes_list
 from .status import get_status
@@ -115,20 +116,28 @@ def add_version(recipe, folder, conan_version, upstream_version):
         logger.error(f"conandata.yml file not found: {conandata_path}")
         raise RecipeNotSupported("no conandata.yml")
 
-    with open(conandata_path) as fil:
-        conandata = yaml.load(fil, Loader=yaml.FullLoader)
-
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
+
     config = recipe.config()
-    config["versions"][conan_version] = {"folder": folder}
-    conandata["sources"][conan_version] = {"sha256": hash_digest, "url": url}
+    config["versions"][DoubleQuotedScalarString(conan_version)] = {}
+    config["versions"][conan_version]["folder"] = folder
+
+    conandata_yaml = YAML()
+    conandata_yaml.preserve_quotes = True
+    with open(conandata_path) as fil:
+        conandata = conandata_yaml.load(fil)
+    conandata["sources"][DoubleQuotedScalarString(conan_version)] = {}
+    conandata["sources"][conan_version]["url"] = DoubleQuotedScalarString(url)
+    conandata["sources"][conan_version]["sha256"] = DoubleQuotedScalarString(
+        hash_digest
+    )
 
     with open(recipe.config_file_path, "w") as fil:
-        yaml.dump(config, fil)
+        recipe.config_yaml.dump(config, fil)
 
     with open(conandata_path, "w") as fil:
-        yaml.dump(conandata, fil)
+        conandata_yaml.dump(conandata, fil)
 
 
 def test_recipe(recipe, folder, version_str):

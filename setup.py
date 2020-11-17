@@ -23,7 +23,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "terminaltables<4",
-        "PyYAML<6",
+        "ruamel.yaml<0.17",
         "requests<3",
         "colored<2",
         "conan",
