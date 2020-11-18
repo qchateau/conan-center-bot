@@ -33,6 +33,7 @@ class RecipeNotUpdatable(UpdateError):
 
 class TestFailed(UpdateError):
     RE_ERRORS = [
+        re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
         re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
         re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
         re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
@@ -48,9 +49,9 @@ class TestFailed(UpdateError):
 
     def details(self):
         for regex in self.RE_ERRORS:
-            match = regex.search(self.output)
-            if match:
-                return match.group(1)
+            errors = [match.group(1) for match in regex.finditer(self.output)]
+            if errors:
+                return "\n".join(errors)
         return "no details"
 
 
@@ -321,6 +322,8 @@ def update_recipes(
             )
         except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
+        except TestFailed as exc:
+            logger.error("%s: Test failed:\n%s", recipe, exc.details())
         except (UpdateError, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
             ok = False
