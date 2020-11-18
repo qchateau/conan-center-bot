@@ -25,6 +25,12 @@ jobs:
           echo "Version: $CCB_VERSION"
           sed -i "s/\"0.0.0\"/\"$CCB_VERSION\"/" ccb/_version.py
 
+      - name: Install and configure conan
+        run: |
+          python3 -m pip install conan
+          conan config install https://github.com/conan-io/hooks.git -sf hooks -tf hooks
+          conan config set hooks.conan-center
+
       - name: Install CCB locally
         run: python3 -m pip install .
 

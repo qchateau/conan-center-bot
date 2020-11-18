@@ -16,6 +16,12 @@ jobs:
       - name: Setup python
         uses: actions/setup-python@v1
 
+      - name: Install and configure conan
+        run: |
+          python3 -m pip install conan
+          conan config install https://github.com/conan-io/hooks.git -sf hooks -tf hooks
+          conan config set hooks.conan-center
+
       - name: Clone CCI
         run: |
           git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
