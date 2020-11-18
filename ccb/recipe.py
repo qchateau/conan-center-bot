@@ -6,11 +6,11 @@ import importlib.util
 from functools import cached_property, lru_cache
 
 from conans import ConanFile
-from ruamel.yaml import YAML
 
 from .version import Version
 from .upstream_project import get_upstream_project
 from .cci import cci_interface
+from .yaml import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -63,15 +63,13 @@ class Recipe:
         self.name = name
         self.path = os.path.join(cci_path, "recipes", name)
         self.config_file_path = os.path.join(self.path, "config.yml")
-        self.config_yaml = YAML()
-        self.config_yaml.preserve_quotes = True
 
     def config(self):
         if not os.path.exists(self.config_file_path):
             raise RecipeError("No config.yml file")
 
         with open(self.config_file_path) as fil:
-            return self.config_yaml.load(fil)
+            return yaml.load(fil)
 
     @cached_property
     def upstream(self):

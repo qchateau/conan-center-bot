@@ -2,12 +2,11 @@ import os
 import re
 import logging
 import subprocess
-from ruamel.yaml import YAML
-from ruamel.yaml.constructor import DoubleQuotedScalarString
 
 from .recipe import Recipe, RecipeError, get_recipes_list
 from .status import get_status
 from .worktree import RecipeInWorktree
+from .yaml import yaml, DoubleQuotes
 
 
 logger = logging.getLogger(__name__)
@@ -138,24 +137,20 @@ def add_version(recipe, folder, conan_version, upstream_version):
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
     config = recipe.config()
-    config["versions"][DoubleQuotedScalarString(conan_version)] = {}
+    config["versions"][DoubleQuotes(conan_version)] = {}
     config["versions"][conan_version]["folder"] = folder
 
-    conandata_yaml = YAML()
-    conandata_yaml.preserve_quotes = True
     with open(conandata_path) as fil:
-        conandata = conandata_yaml.load(fil)
-    conandata["sources"][DoubleQuotedScalarString(conan_version)] = {}
-    conandata["sources"][conan_version]["url"] = DoubleQuotedScalarString(url)
-    conandata["sources"][conan_version]["sha256"] = DoubleQuotedScalarString(
-        hash_digest
-    )
+        conandata = yaml.load(fil)
+    conandata["sources"][DoubleQuotes(conan_version)] = {}
+    conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
+    conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
 
     with open(recipe.config_file_path, "w") as fil:
-        recipe.config_yaml.dump(config, fil)
+        yaml.dump(config, fil)
 
     with open(conandata_path, "w") as fil:
-        conandata_yaml.dump(conandata, fil)
+        yaml.dump(conandata, fil)
 
 
 def test_recipe(recipe, folder, version_str):
