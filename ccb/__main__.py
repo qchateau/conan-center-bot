@@ -193,6 +193,9 @@ def main():
 
     if not hasattr(args, "recipe") or not args.recipe:
         args.recipe = get_recipes_list(args.cci)
+    else:
+        # The user specified a list, show it all
+        args.all = True
 
     try:
         sys.exit(args.func(args))

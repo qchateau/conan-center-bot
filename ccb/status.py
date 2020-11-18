@@ -73,6 +73,9 @@ def print_status_table(cci_path, recipes, print_all, jobs):
     table = AsciiTable(table_data)
 
     def print_recipe_type(name, recipes, print_homepage=False):
+        if not recipes:
+            return
+
         print(f"{len(recipes)} {name}")
         if print_all:
             for r in recipes:

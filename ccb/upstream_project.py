@@ -11,6 +11,7 @@ from .project_specifics import (
     TAGS_BLACKLIST,
     PROJECT_TAGS_BLACKLIST,
     PROJECT_TAGS_WHITELIST,
+    PROJECT_TAGS_FIXERS,
 )
 
 
@@ -84,6 +85,7 @@ class GitProject(UpstreamProject):
         self.git_url = git_url
         self.whitelist = PROJECT_TAGS_WHITELIST.get(recipe.name, [])
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
+        self.fixer = PROJECT_TAGS_FIXERS.get(recipe.name, None)
 
     @cached_property
     def versions(self):  # pylint: disable=invalid-overridden-method
@@ -101,7 +103,7 @@ class GitProject(UpstreamProject):
             "%s: ignored %s tags", self.recipe.name, len(tags) - len(valid_tags)
         )
 
-        return tuple(Version(tag) for tag in valid_tags)
+        return tuple(Version(version=tag, fixer=self.fixer) for tag in valid_tags)
 
     @property
     def most_recent_version(self):

@@ -12,9 +12,11 @@ VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+(_[0-9]+)+")
 class Version:
     UNKNOWN = "unknown"
 
-    def __init__(self, version=UNKNOWN):
+    def __init__(self, version=UNKNOWN, fixer=None):
+        if fixer is None:
+            fixer = _fix_version
         self.original = version
-        self.fixed = _fix_version(version)
+        self.fixed = fixer(version)
         self.to_numeric = _to_numeric(self.fixed)
         self.is_date = bool(
             VERSION_DATE_RE.search(
