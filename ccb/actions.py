@@ -50,6 +50,7 @@ def _update_issue(issue_url, content):
 def update_status_issue(
     cci_path,
     issue_url_list,
+    branch_prefix,
     force,
     push_to,
     status_jobs,
@@ -87,6 +88,7 @@ def update_status_issue(
                 push_to=push_to,
                 force=force,
                 allow_interaction=False,
+                branch_prefix=branch_prefix,
             )
         except BranchAlreadyExists as exc:
             logger.info("%s: skipped (%s)", recipe_status.name, str(exc))

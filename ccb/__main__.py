@@ -36,6 +36,7 @@ def cmd_update(args):
         push_to=args.push_to,
         force=args.force,
         allow_interaction=True,
+        branch_prefix=args.branch_prefix,
     )
 
 
@@ -46,6 +47,7 @@ def cmd_update_status_issue(args):
         force=args.force,
         push_to=args.push_to,
         status_jobs=int(args.jobs),
+        branch_prefix=args.branch_prefix,
     )
 
 
@@ -123,6 +125,11 @@ def main():
         help="List of recipes to update.",
     )
     parser_update.add_argument(
+        "--branch-prefix",
+        default="ccb-",
+        help="Branch name prefix.",
+    )
+    parser_update.add_argument(
         "--force",
         "-f",
         action="store_true",
@@ -150,6 +157,11 @@ def main():
         help="Update the status issue",
     )
     parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
+    parser_uis.add_argument(
+        "--branch-prefix",
+        default="ccb-",
+        help="Branch name prefix.",
+    )
     parser_uis.add_argument(
         "--force",
         "-f",

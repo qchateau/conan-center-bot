@@ -216,6 +216,7 @@ def update_one_recipe(
     push_to,
     force,
     allow_interaction,
+    branch_prefix,
 ):
     recipe = Recipe(cci_path, recipe_name)
     if getattr(recipe.conanfile_class, "deprecated", False):
@@ -227,7 +228,7 @@ def update_one_recipe(
         upstream_version = _get_most_recent_upstream_version(recipe)
 
     conan_version = upstream_version.fixed
-    branch_name = f"{recipe.name}-{conan_version}"
+    branch_name = f"{branch_prefix}{recipe.name}-{conan_version}"
     force_push = force
 
     if branch_exists(recipe, branch_name):
@@ -297,6 +298,7 @@ def update_recipes(
     push_to,
     force,
     allow_interaction,
+    branch_prefix,
 ):
     ok = True
     for recipe in recipes:
@@ -310,6 +312,7 @@ def update_recipes(
                 push_to,
                 force,
                 allow_interaction,
+                branch_prefix,
             )
         except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
