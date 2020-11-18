@@ -3,8 +3,7 @@ import re
 import logging
 import subprocess
 
-from .recipe import Recipe, RecipeError, get_recipes_list
-from .status import get_status
+from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
 from .yaml import yaml, DoubleQuotes
 
@@ -159,6 +158,7 @@ def test_recipe(recipe, folder, version_str):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=version_folder_path,
+        check=False,
     )
 
     logger.debug(ret.stdout.decode())

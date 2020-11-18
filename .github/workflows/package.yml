@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Setup python
         uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
 
       - name: Checkout
         uses: actions/checkout@v2
@@ -25,6 +27,11 @@ jobs:
 
       - name: Install CCB locally
         run: python3 -m pip install .
+
+      - name: Pylint
+        run: |
+          python3 -m pip install pylint
+          pylint ccb
 
       - name: Clone CCI
         run: |

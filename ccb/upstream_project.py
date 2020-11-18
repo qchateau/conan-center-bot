@@ -1,10 +1,10 @@
 import re
 import abc
 import hashlib
-import requests
 import logging
 import subprocess
 from functools import cached_property, lru_cache
+import requests
 
 from .version import Version
 from .project_specifics import (
@@ -67,7 +67,7 @@ class UpstreamProject(abc.ABC):
 
 class UnsupportedProject(UpstreamProject):
     @cached_property
-    def versions(self):
+    def versions(self):  # pylint: disable=invalid-overridden-method
         return {}
 
     @property
@@ -86,7 +86,7 @@ class GitProject(UpstreamProject):
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
 
     @cached_property
-    def versions(self):
+    def versions(self):  # pylint: disable=invalid-overridden-method
         logger.debug("%s: fetching tags...", self.recipe.name)
         git_output = subprocess.check_output(
             ["git", "ls-remote", "-t", self.git_url]

@@ -1,13 +1,10 @@
-import re
-import time
 import logging
-import datetime
 from multiprocessing import Pool
 
 from terminaltables import AsciiTable
 from colored import fg, stylize
 
-from .recipe import get_recipes_list, Recipe
+from .recipe import Recipe
 from . import __version__
 
 logger = logging.getLogger(__name__)
@@ -18,7 +15,7 @@ def status_one_recipe(cci_path, recipe_name):
 
 
 def get_status(cci_path, recipes, jobs):
-    logger.info(f"Parsing {len(recipes)} recipes...")
+    logger.info("Parsing %s recipes...", len(recipes))
 
     with Pool(jobs) as p:
         status_futures = [

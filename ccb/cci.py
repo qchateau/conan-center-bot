@@ -1,9 +1,10 @@
 import re
 import typing
 import logging
-import requests
 import functools
 import subprocess
+import requests
+
 from .github import get_github_token
 from .version import Version
 
@@ -68,7 +69,8 @@ class _CciInterface:
             or title_re.search(pr.get("title", ""))
         ]
 
-    def owner_and_repo(self, cci_path):
+    @staticmethod
+    def owner_and_repo(cci_path):
         pattern = re.compile(r"[/:]([^/]+)/([^/]+)\.git")
         origin = subprocess.check_output(
             ["git", "config", "--get", "remote.origin.url"], cwd=cci_path
