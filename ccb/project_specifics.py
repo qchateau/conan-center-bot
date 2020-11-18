@@ -21,6 +21,7 @@ PROJECT_TAGS_BLACKLIST = {
     "nng": [re.compile(r"^r12$")],
     "miniz": [re.compile(r"^v1[0-9][0-9]$")],
     "libusb": [re.compile(r"^r[0-9]{3}$")],
+    "c-ares": [re.compile(r"^curl-(.*)")],
 }
 
 # Project-based whitelist, a blacklist must not be defined
