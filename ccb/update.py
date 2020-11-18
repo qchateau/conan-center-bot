@@ -127,6 +127,7 @@ def push_branch(recipe, remote, branch_name, force):
 
 
 def add_version(recipe, folder, conan_version, upstream_version):
+    most_recent_version = recipe.most_recent_version.original
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
@@ -138,6 +139,10 @@ def add_version(recipe, folder, conan_version, upstream_version):
     conandata["sources"][DoubleQuotes(conan_version)] = {}
     conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
     conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
+
+    most_recent_patches = conandata.get("patches", {}).get(most_recent_version)
+    if most_recent_patches:
+        conandata["patches"][DoubleQuotes(conan_version)] = most_recent_patches
 
     with open(recipe.config_path, "w") as fil:
         yaml.dump(config, fil)
