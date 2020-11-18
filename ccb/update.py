@@ -33,6 +33,7 @@ class RecipeNotUpdatable(UpdateError):
 
 class TestFailed(UpdateError):
     RE_ERRORS = [
+        re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
         re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
         re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
         re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
@@ -48,9 +49,9 @@ class TestFailed(UpdateError):
 
     def details(self):
         for regex in self.RE_ERRORS:
-            match = regex.search(self.output)
-            if match:
-                return match.group(1)
+            errors = [match.group(1) for match in regex.finditer(self.output)]
+            if errors:
+                return "\n".join(errors)
         return "no details"
 
 
@@ -127,6 +128,7 @@ def push_branch(recipe, remote, branch_name, force):
 
 
 def add_version(recipe, folder, conan_version, upstream_version):
+    most_recent_version = recipe.most_recent_version.original
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
@@ -138,6 +140,10 @@ def add_version(recipe, folder, conan_version, upstream_version):
     conandata["sources"][DoubleQuotes(conan_version)] = {}
     conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
     conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
+
+    most_recent_patches = conandata.get("patches", {}).get(most_recent_version)
+    if most_recent_patches:
+        conandata["patches"][DoubleQuotes(conan_version)] = most_recent_patches
 
     with open(recipe.config_path, "w") as fil:
         yaml.dump(config, fil)
@@ -316,6 +322,8 @@ def update_recipes(
             )
         except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
+        except TestFailed as exc:
+            logger.error("%s: Test failed:\n%s", recipe, exc.details())
         except (UpdateError, RecipeError) as exc:
             logger.error("%s: %s", recipe, str(exc))
             ok = False
