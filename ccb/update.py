@@ -128,11 +128,6 @@ def push_branch(recipe, remote, branch_name, force):
 
 
 def add_version(recipe, folder, conan_version, upstream_version):
-    conandata_path = os.path.join(recipe.path, folder, "conandata.yml")
-    if not os.path.exists(conandata_path):
-        logger.error(f"conandata.yml file not found: {conandata_path}")
-        raise RecipeNotSupported("no conandata.yml")
-
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
@@ -140,16 +135,15 @@ def add_version(recipe, folder, conan_version, upstream_version):
     config["versions"][DoubleQuotes(conan_version)] = {}
     config["versions"][conan_version]["folder"] = folder
 
-    with open(conandata_path) as fil:
-        conandata = yaml.load(fil)
+    conandata = recipe.conandata(folder)
     conandata["sources"][DoubleQuotes(conan_version)] = {}
     conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
     conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
 
-    with open(recipe.config_file_path, "w") as fil:
+    with open(recipe.config_path, "w") as fil:
         yaml.dump(config, fil)
 
-    with open(conandata_path, "w") as fil:
+    with open(recipe.conandata_path(folder), "w") as fil:
         yaml.dump(conandata, fil)
 
 
@@ -254,7 +248,7 @@ def update_one_recipe(
         if not force_push:
             raise BranchAlreadyExists(branch_name)
 
-    folder = folder or recipe.versions_folders[recipe.most_recent_version]
+    folder = folder or recipe.folder(recipe.most_recent_version)
 
     logger.info(
         "%s: adding version %s to folder %s in branch %s from upstream version %s",

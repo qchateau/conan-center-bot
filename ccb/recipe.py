@@ -62,13 +62,13 @@ class Recipe:
     def __init__(self, cci_path, name):
         self.name = name
         self.path = os.path.join(cci_path, "recipes", name)
-        self.config_file_path = os.path.join(self.path, "config.yml")
+        self.config_path = os.path.join(self.path, "config.yml")
 
     def config(self):
-        if not os.path.exists(self.config_file_path):
+        if not os.path.exists(self.config_path):
             raise RecipeError("No config.yml file")
 
-        with open(self.config_file_path) as fil:
+        with open(self.config_path) as fil:
             return yaml.load(fil)
 
     @cached_property
@@ -80,12 +80,16 @@ class Recipe:
         return [Version(v) for v in self.config()["versions"].keys()]
 
     @property
-    def versions_folders(self):
-        return {Version(k): v["folder"] for k, v in self.config()["versions"].items()}
-
-    @property
     def most_recent_version(self):
         return sorted(self.versions)[-1]
+
+    def folder(self, version):
+        assert isinstance(version, Version)
+
+        for k, v in self.config()["versions"].items():
+            if Version(k) == version:
+                return v["folder"]
+        raise KeyError(version)
 
     def status(self, recipe_version=None, upstream_version=None):
         try:
@@ -112,11 +116,25 @@ class Recipe:
             deprecated,
         )
 
+    def conandata(self, version_or_folder):
+        path = self.conandata_path(version_or_folder)
+        if not os.path.exists(path):
+            raise RecipeError("no conandata.yml")
+        with open(path) as fil:
+            return yaml.load(fil)
+
+    def conandata_path(self, version_or_folder):
+        if isinstance(version_or_folder, Version):
+            folder = self.folder(version_or_folder)
+        else:
+            folder = version_or_folder
+        return os.path.join(self.path, folder, "conandata.yml")
+
     @lru_cache
     def conanfile_class(self, version):
         assert isinstance(version, Version)
 
-        version_folder_path = os.path.join(self.path, self.versions_folders[version])
+        version_folder_path = os.path.join(self.path, self.folder(version))
 
         spec = importlib.util.spec_from_file_location(
             "conanfile", os.path.join(version_folder_path, "conanfile.py")
