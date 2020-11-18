@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import logging
 import subprocess
 
@@ -143,7 +144,9 @@ def add_version(recipe, folder, conan_version, upstream_version):
 
     most_recent_patches = conandata.get("patches", {}).get(most_recent_version)
     if most_recent_patches:
-        conandata["patches"][DoubleQuotes(conan_version)] = most_recent_patches
+        conandata["patches"][DoubleQuotes(conan_version)] = copy.deepcopy(
+            most_recent_patches
+        )
 
     with open(recipe.config_path, "w") as fil:
         yaml.dump(config, fil)
