@@ -91,6 +91,13 @@ class Recipe:
                 return v["folder"]
         raise KeyError(version)
 
+    def source(self, version):
+        conandata = self.conandata(version)
+        for k, v in conandata["sources"].items():
+            if Version(k) == version:
+                return v
+        raise KeyError(version)
+
     def status(self, recipe_version=None, upstream_version=None):
         try:
             recipe_version = recipe_version or self.most_recent_version
