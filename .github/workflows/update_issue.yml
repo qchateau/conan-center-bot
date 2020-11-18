@@ -32,6 +32,7 @@ jobs:
           conan-center-bot update-status-issue \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
+            --force \
             --push-to origin \
             https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
