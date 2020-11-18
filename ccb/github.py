@@ -1,10 +1,10 @@
-_TOKEN = None
+class _GitHubToken:
+    value = None
 
 
 def get_github_token():
-    return _TOKEN
+    return _GitHubToken.value
 
 
 def set_github_token(token):
-    global _TOKEN
-    _TOKEN = token
+    _GitHubToken.value = token

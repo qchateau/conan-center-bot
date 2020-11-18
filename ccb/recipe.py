@@ -6,11 +6,11 @@ import importlib.util
 from functools import cached_property, lru_cache
 
 from conans import ConanFile
-from ruamel.yaml import YAML
 
 from .version import Version
 from .upstream_project import get_upstream_project
 from .cci import cci_interface
+from .yaml import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -62,16 +62,14 @@ class Recipe:
     def __init__(self, cci_path, name):
         self.name = name
         self.path = os.path.join(cci_path, "recipes", name)
-        self.config_file_path = os.path.join(self.path, "config.yml")
-        self.config_yaml = YAML()
-        self.config_yaml.preserve_quotes = True
+        self.config_path = os.path.join(self.path, "config.yml")
 
     def config(self):
-        if not os.path.exists(self.config_file_path):
+        if not os.path.exists(self.config_path):
             raise RecipeError("No config.yml file")
 
-        with open(self.config_file_path) as fil:
-            return self.config_yaml.load(fil)
+        with open(self.config_path) as fil:
+            return yaml.load(fil)
 
     @cached_property
     def upstream(self):
@@ -82,12 +80,23 @@ class Recipe:
         return [Version(v) for v in self.config()["versions"].keys()]
 
     @property
-    def versions_folders(self):
-        return {Version(k): v["folder"] for k, v in self.config()["versions"].items()}
-
-    @property
     def most_recent_version(self):
         return sorted(self.versions)[-1]
+
+    def folder(self, version):
+        assert isinstance(version, Version)
+
+        for k, v in self.config()["versions"].items():
+            if Version(k) == version:
+                return v["folder"]
+        raise KeyError(version)
+
+    def source(self, version):
+        conandata = self.conandata(version)
+        for k, v in conandata["sources"].items():
+            if Version(k) == version:
+                return v
+        raise KeyError(version)
 
     def status(self, recipe_version=None, upstream_version=None):
         try:
@@ -114,11 +123,25 @@ class Recipe:
             deprecated,
         )
 
+    def conandata(self, version_or_folder):
+        path = self.conandata_path(version_or_folder)
+        if not os.path.exists(path):
+            raise RecipeError("no conandata.yml")
+        with open(path) as fil:
+            return yaml.load(fil)
+
+    def conandata_path(self, version_or_folder):
+        if isinstance(version_or_folder, Version):
+            folder = self.folder(version_or_folder)
+        else:
+            folder = version_or_folder
+        return os.path.join(self.path, folder, "conandata.yml")
+
     @lru_cache
     def conanfile_class(self, version):
         assert isinstance(version, Version)
 
-        version_folder_path = os.path.join(self.path, self.versions_folders[version])
+        version_folder_path = os.path.join(self.path, self.folder(version))
 
         spec = importlib.util.spec_from_file_location(
             "conanfile", os.path.join(version_folder_path, "conanfile.py")

@@ -1,9 +1,9 @@
 import re
 import time
 import datetime
-import requests
 import logging
 import traceback
+import requests
 
 from . import __version__
 from .recipe import get_recipes_list
@@ -43,13 +43,14 @@ def _update_issue(issue_url, content):
     if resp.ok:
         return True
 
-    logger.error(f"update failed: {resp.reason}")
+    logger.error("update failed: %s", resp.reason)
     return False
 
 
-def update_status_issue(
+def update_status_issue(  # pylint:disable=too-many-locals
     cci_path,
     issue_url_list,
+    branch_prefix,
     force,
     push_to,
     status_jobs,
@@ -87,16 +88,17 @@ def update_status_issue(
                 push_to=push_to,
                 force=force,
                 allow_interaction=False,
+                branch_prefix=branch_prefix,
             )
         except BranchAlreadyExists as exc:
             logger.info("%s: skipped (%s)", recipe_status.name, str(exc))
             branches[recipe_status] = exc.branch_name
         except TestFailed as exc:
             logger.error("%s: test failed", recipe_status.name)
-            errors[recipe_status] = (f"Test failed", exc.details())
+            errors[recipe_status] = exc.details()
         except Exception as exc:
             logger.error("%s: %s", recipe_status.name, str(exc))
-            errors[recipe_status] = (f"Unexpected error", traceback.format_exc())
+            errors[recipe_status] = traceback.format_exc()
 
     duration = time.time() - t0
 
@@ -187,12 +189,11 @@ def update_status_issue(
             "<tr><th>Name</th><th>Error</th></tr>",
         ]
         + [
-            f"<tr><td>"
+            "<tr><td>"
             + (f'<a href="{s.homepage}">{s.name}</a>' if s.homepage else f"{s.name}")
             + "</td>"
             + "<td>"
-            + f"{error[0]}"
-            + f"{str_to_pre(error[1])}"
+            + f"{str_to_pre(error)}"
             + "</td>"
             + "</tr>"
             for s, error in errors.items()

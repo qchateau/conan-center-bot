@@ -12,7 +12,7 @@ from ccb.github import set_github_token
 from ccb.actions import update_status_issue
 
 
-def bad_command(args, parser):
+def bad_command(parser):
     parser.print_usage()
     return 1
 
@@ -36,6 +36,7 @@ def cmd_update(args):
         push_to=args.push_to,
         force=args.force,
         allow_interaction=True,
+        branch_prefix=args.branch_prefix,
     )
 
 
@@ -46,6 +47,7 @@ def cmd_update_status_issue(args):
         force=args.force,
         push_to=args.push_to,
         status_jobs=int(args.jobs),
+        branch_prefix=args.branch_prefix,
     )
 
 
@@ -63,8 +65,8 @@ def configure_logging(args):
         logger.setLevel(logging.DEBUG)
 
 
-def add_subparser(subparsers, name, function, help):
-    subparser = subparsers.add_parser(name, help=help)
+def add_subparser(subparsers, name, function, help_text):
+    subparser = subparsers.add_parser(name, help=help_text)
 
     subparser.add_argument(
         "--verbose", "-v", action="count", default=0, help="Verbosity level"
@@ -83,7 +85,7 @@ def add_subparser(subparsers, name, function, help):
 def main():
     parser = argparse.ArgumentParser()
     parser.set_defaults(
-        func=lambda args: bad_command(args, parser),
+        func=lambda _: bad_command(parser),
         cci=None,
         verbose=False,
         quiet=False,
@@ -93,7 +95,7 @@ def main():
 
     # Status
     parser_status = add_subparser(
-        subparsers, "status", cmd_status, help="Display the status of recipes"
+        subparsers, "status", cmd_status, help_text="Display the status of recipes"
     )
     parser_status.add_argument(
         "--all",
@@ -115,12 +117,17 @@ def main():
 
     # Update
     parser_update = add_subparser(
-        subparsers, "update", cmd_update, help="Auto-update a list of recipes"
+        subparsers, "update", cmd_update, help_text="Auto-update a list of recipes"
     )
     parser_update.add_argument(
         "recipe",
         nargs="*",
         help="List of recipes to update.",
+    )
+    parser_update.add_argument(
+        "--branch-prefix",
+        default="ccb-",
+        help="Branch name prefix.",
     )
     parser_update.add_argument(
         "--force",
@@ -147,9 +154,14 @@ def main():
         subparsers,
         "update-status-issue",
         cmd_update_status_issue,
-        help="Update the status issue",
+        help_text="Update the status issue",
     )
     parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
+    parser_uis.add_argument(
+        "--branch-prefix",
+        default="ccb-",
+        help="Branch name prefix.",
+    )
     parser_uis.add_argument(
         "--force",
         "-f",

@@ -2,12 +2,10 @@ import os
 import re
 import logging
 import subprocess
-from ruamel.yaml import YAML
-from ruamel.yaml.constructor import DoubleQuotedScalarString
 
-from .recipe import Recipe, RecipeError, get_recipes_list
-from .status import get_status
+from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
+from .yaml import yaml, DoubleQuotes
 
 
 logger = logging.getLogger(__name__)
@@ -129,33 +127,23 @@ def push_branch(recipe, remote, branch_name, force):
 
 
 def add_version(recipe, folder, conan_version, upstream_version):
-    conandata_path = os.path.join(recipe.path, folder, "conandata.yml")
-    if not os.path.exists(conandata_path):
-        logger.error(f"conandata.yml file not found: {conandata_path}")
-        raise RecipeNotSupported("no conandata.yml")
-
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
     config = recipe.config()
-    config["versions"][DoubleQuotedScalarString(conan_version)] = {}
+    config["versions"][DoubleQuotes(conan_version)] = {}
     config["versions"][conan_version]["folder"] = folder
 
-    conandata_yaml = YAML()
-    conandata_yaml.preserve_quotes = True
-    with open(conandata_path) as fil:
-        conandata = conandata_yaml.load(fil)
-    conandata["sources"][DoubleQuotedScalarString(conan_version)] = {}
-    conandata["sources"][conan_version]["url"] = DoubleQuotedScalarString(url)
-    conandata["sources"][conan_version]["sha256"] = DoubleQuotedScalarString(
-        hash_digest
-    )
+    conandata = recipe.conandata(folder)
+    conandata["sources"][DoubleQuotes(conan_version)] = {}
+    conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
+    conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
 
-    with open(recipe.config_file_path, "w") as fil:
-        recipe.config_yaml.dump(config, fil)
+    with open(recipe.config_path, "w") as fil:
+        yaml.dump(config, fil)
 
-    with open(conandata_path, "w") as fil:
-        conandata_yaml.dump(conandata, fil)
+    with open(recipe.conandata_path(folder), "w") as fil:
+        yaml.dump(conandata, fil)
 
 
 def test_recipe(recipe, folder, version_str):
@@ -170,6 +158,7 @@ def test_recipe(recipe, folder, version_str):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=version_folder_path,
+        check=False,
     )
 
     logger.debug(ret.stdout.decode())
@@ -227,6 +216,7 @@ def update_one_recipe(
     push_to,
     force,
     allow_interaction,
+    branch_prefix,
 ):
     recipe = Recipe(cci_path, recipe_name)
     if getattr(recipe.conanfile_class, "deprecated", False):
@@ -238,7 +228,7 @@ def update_one_recipe(
         upstream_version = _get_most_recent_upstream_version(recipe)
 
     conan_version = upstream_version.fixed
-    branch_name = f"{recipe.name}-{conan_version}"
+    branch_name = f"{branch_prefix}{recipe.name}-{conan_version}"
     force_push = force
 
     if branch_exists(recipe, branch_name):
@@ -259,7 +249,7 @@ def update_one_recipe(
         if not force_push:
             raise BranchAlreadyExists(branch_name)
 
-    folder = folder or recipe.versions_folders[recipe.most_recent_version]
+    folder = folder or recipe.folder(recipe.most_recent_version)
 
     logger.info(
         "%s: adding version %s to folder %s in branch %s from upstream version %s",
@@ -308,6 +298,7 @@ def update_recipes(
     push_to,
     force,
     allow_interaction,
+    branch_prefix,
 ):
     ok = True
     for recipe in recipes:
@@ -321,6 +312,7 @@ def update_recipes(
                 push_to,
                 force,
                 allow_interaction,
+                branch_prefix,
             )
         except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))

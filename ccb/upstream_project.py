@@ -1,10 +1,10 @@
 import re
 import abc
 import hashlib
-import requests
 import logging
 import subprocess
 from functools import cached_property, lru_cache
+import requests
 
 from .version import Version
 from .project_specifics import (
@@ -67,7 +67,7 @@ class UpstreamProject(abc.ABC):
 
 class UnsupportedProject(UpstreamProject):
     @cached_property
-    def versions(self):
+    def versions(self):  # pylint: disable=invalid-overridden-method
         return {}
 
     @property
@@ -86,7 +86,7 @@ class GitProject(UpstreamProject):
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
 
     @cached_property
-    def versions(self):
+    def versions(self):  # pylint: disable=invalid-overridden-method
         logger.debug("%s: fetching tags...", self.recipe.name)
         git_output = subprocess.check_output(
             ["git", "ls-remote", "-t", self.git_url]
@@ -141,15 +141,11 @@ class GitProject(UpstreamProject):
 
 
 class GithubProject(GitProject):
-    HOMEPAGE_RE = re.compile(r"https://github.com/([^/]+)/([^/]+)")
+    HOMEPAGE_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
+    SOURCE_URL_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
 
     def __init__(self, recipe, conanfile_class):
-        match = self.HOMEPAGE_RE.match(conanfile_class.homepage)
-        if not match:
-            raise _Unsupported()
-
-        owner = match.group(1)
-        repo = match.group(2)
+        owner, repo = self._get_owner_repo(recipe, conanfile_class)
         git_url = f"https://github.com/{owner}/{repo}.git"
 
         super().__init__(recipe, conanfile_class, git_url)
@@ -160,6 +156,26 @@ class GithubProject(GitProject):
         if version.unknown:
             return None
         return f"https://github.com/{self.owner}/{self.repo}/archive/{version.original}.tar.gz"
+
+    @classmethod
+    def _get_owner_repo(cls, recipe, conanfile_class):
+        match = cls.HOMEPAGE_RE.match(conanfile_class.homepage)
+        if match:
+            return match.groups()
+
+        try:
+            url = recipe.source(recipe.most_recent_version)["url"]
+            match = cls.SOURCE_URL_RE.match(url)
+            if match:
+                return match.groups()
+        except Exception as exc:
+            logger.debug(
+                "recipe %s not supported as GitHub project because of the following exception: %s",
+                recipe.name,
+                repr(exc),
+            )
+
+        raise _Unsupported()
 
 
 _CLASSES = [GithubProject]
