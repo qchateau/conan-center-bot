@@ -95,10 +95,10 @@ def update_status_issue(  # pylint:disable=too-many-locals
             branches[recipe_status] = exc.branch_name
         except TestFailed as exc:
             logger.error("%s: test failed", recipe_status.name)
-            errors[recipe_status] = ("Test failed", exc.details())
+            errors[recipe_status] = exc.details()
         except Exception as exc:
             logger.error("%s: %s", recipe_status.name, str(exc))
-            errors[recipe_status] = ("Unexpected error", traceback.format_exc())
+            errors[recipe_status] = traceback.format_exc()
 
     duration = time.time() - t0
 
@@ -193,8 +193,7 @@ def update_status_issue(  # pylint:disable=too-many-locals
             + (f'<a href="{s.homepage}">{s.name}</a>' if s.homepage else f"{s.name}")
             + "</td>"
             + "<td>"
-            + f"{error[0]}"
-            + f"{str_to_pre(error[1])}"
+            + f"{str_to_pre(error)}"
             + "</td>"
             + "</tr>"
             for s, error in errors.items()
