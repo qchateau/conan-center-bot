@@ -23,7 +23,7 @@ class _CciInterface:
         self.owner = "conan-io"
         self.repo = "conan-center-index"
 
-    @functools.lru_cache
+    @functools.lru_cache(None)
     def pull_requests(self):
         github_token = get_github_token()
         headers = {"Accept": "application/vnd.github.v3+json"}

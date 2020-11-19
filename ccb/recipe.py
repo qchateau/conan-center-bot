@@ -3,7 +3,7 @@ import typing
 import inspect
 import logging
 import importlib.util
-from functools import cached_property, lru_cache
+from functools import lru_cache
 
 from conans import ConanFile
 
@@ -71,7 +71,8 @@ class Recipe:
         with open(self.config_path) as fil:
             return yaml.load(fil)
 
-    @cached_property
+    @property
+    @lru_cache(None)
     def upstream(self):
         return get_upstream_project(self)
 
@@ -137,7 +138,7 @@ class Recipe:
             folder = version_or_folder
         return os.path.join(self.path, folder, "conandata.yml")
 
-    @lru_cache
+    @lru_cache(None)
     def conanfile_class(self, version):
         assert isinstance(version, Version)
 
