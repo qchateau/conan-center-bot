@@ -21,6 +21,9 @@ jobs:
           python3 -m pip install conan
           conan config install https://github.com/conan-io/hooks.git -sf hooks -tf hooks
           conan config set hooks.conan-center
+          conan profile new default --detect
+          conan profile update settings.compiler.libcxx=libstdc++11 default
+          conan profile show default
 
       - name: Clone CCI
         run: |
