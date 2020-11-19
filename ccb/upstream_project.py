@@ -3,7 +3,7 @@ import abc
 import hashlib
 import logging
 import subprocess
-from functools import cached_property, lru_cache
+from functools import lru_cache
 import requests
 
 from .version import Version
@@ -55,7 +55,7 @@ class UpstreamProject(abc.ABC):
     def source_url(self, version) -> str:
         pass
 
-    @lru_cache
+    @lru_cache(None)
     def source_sha256_digest(self, version):
         url = self.source_url(version)
         if not url:
@@ -67,7 +67,7 @@ class UpstreamProject(abc.ABC):
 
 
 class UnsupportedProject(UpstreamProject):
-    @cached_property
+    @property
     def versions(self):  # pylint: disable=invalid-overridden-method
         return {}
 
@@ -87,7 +87,8 @@ class GitProject(UpstreamProject):
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
         self.fixer = PROJECT_TAGS_FIXERS.get(recipe.name, None)
 
-    @cached_property
+    @property
+    @lru_cache(None)
     def versions(self):  # pylint: disable=invalid-overridden-method
         logger.debug("%s: fetching tags...", self.recipe.name)
         git_output = subprocess.check_output(
@@ -122,7 +123,7 @@ class GitProject(UpstreamProject):
                         "%s: tag %s ignored because it does not match any of %s",
                         self.recipe.name,
                         tag,
-                        (regex.pattern for regex in self.whitelist),
+                        list(regex.pattern for regex in self.whitelist),
                     )
         else:
             for tag in tags:
