@@ -7,6 +7,7 @@ import subprocess
 from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
 from .yaml import yaml, DoubleQuotes
+from .version import Version
 
 
 logger = logging.getLogger(__name__)
@@ -133,19 +134,38 @@ def add_version(recipe, folder, conan_version, upstream_version):
     url = recipe.upstream.source_url(upstream_version)
     hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
 
+    def smart_insert(container, key, value):
+        container_keys = list(container.keys())
+        ascending = Version(container_keys[0]) < Version(container_keys[-1])
+        insert_idx = len(container_keys)
+        if ascending:
+            for idx, ckey in enumerate(container_keys):
+                if Version(ckey) > Version(key):
+                    insert_idx = idx
+                    break
+            container.insert(insert_idx, key, value)
+        else:
+            for idx, ckey in enumerate(container_keys):
+                if Version(ckey) < Version(key):
+                    insert_idx = idx
+                    break
+            container.insert(insert_idx, key, value)
+
     config = recipe.config()
-    config["versions"][DoubleQuotes(conan_version)] = {}
+    smart_insert(config["versions"], DoubleQuotes(conan_version), {})
     config["versions"][conan_version]["folder"] = folder
 
     conandata = recipe.conandata(folder)
-    conandata["sources"][DoubleQuotes(conan_version)] = {}
+    smart_insert(conandata["sources"], DoubleQuotes(conan_version), {})
     conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
     conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
 
     most_recent_patches = conandata.get("patches", {}).get(most_recent_version)
     if most_recent_patches:
-        conandata["patches"][DoubleQuotes(conan_version)] = copy.deepcopy(
-            most_recent_patches
+        smart_insert(
+            conandata["patches"],
+            DoubleQuotes(conan_version),
+            copy.deepcopy(most_recent_patches),
         )
 
     with open(recipe.config_path, "w") as fil:
