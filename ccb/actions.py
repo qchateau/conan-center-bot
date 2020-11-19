@@ -18,11 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 def _format_duration(duration):
-    minutes = duration // 60
-    seconds = duration % 60
+    hours = int(duration // 3600)
+    duration -= hours * 3600
+    minutes = int(duration // 60)
+    seconds = duration - minutes * 60
 
+    if hours > 0:
+        return f"{hours}h {minutes}m"
     if minutes > 0:
-        return f"{int(minutes)}m {int(seconds)}s"
+        return f"{minutes}m {int(seconds)}s"
     return f"{seconds:.1f}s"
 
 
@@ -47,31 +51,13 @@ def _update_issue(issue_url, content):
     return False
 
 
-def update_status_issue(  # pylint:disable=too-many-locals
-    cci_path,
-    issue_url_list,
-    branch_prefix,
-    force,
-    push_to,
-    status_jobs,
-):
-    t0 = time.time()
-    recipes = get_recipes_list(cci_path)
-    status = get_status(cci_path, recipes, status_jobs)
-    status = [s for s in status if not s.deprecated]
-    status = list(sorted(status, key=lambda s: s.name))
-    updatable = [s for s in status if s.update_possible()]
-    inconsistent_version = [s for s in status if s.inconsistent_versioning()]
-    up_to_date_count = len([s for s in status if s.up_to_date()])
-    unsupported_count = (
-        len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
-    )
-
+def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to):
     errors = dict()
     branches = dict()
-    for i, recipe_status in enumerate(updatable):
-        print(
-            f"===== [{i+1:3}/{len(updatable):3}] {' '+recipe_status.name+' ':=^25}====="
+    durations = dict()
+    for i, recipe_status in enumerate(recipes_status):
+        logger.info(  # pylint: disable=logging-fstring-interpolation
+            f"===== [{i+1:3}/{len(recipes_status):3}] {' '+recipe_status.name+' ':=^25}====="
         )
 
         if recipe_status.prs_opened():
@@ -79,6 +65,7 @@ def update_status_issue(  # pylint:disable=too-many-locals
             continue
 
         try:
+            t1 = time.time()
             branches[recipe_status] = update_one_recipe(
                 cci_path=cci_path,
                 recipe_name=recipe_status.name,
@@ -95,24 +82,73 @@ def update_status_issue(  # pylint:disable=too-many-locals
             branches[recipe_status] = exc.branch_name
         except TestFailed as exc:
             logger.error("%s: test failed", recipe_status.name)
+            durations[recipe_status] = time.time() - t1
             errors[recipe_status] = exc.details()
         except Exception as exc:
             logger.error("%s: %s", recipe_status.name, str(exc))
+            durations[recipe_status] = time.time() - t1
             errors[recipe_status] = traceback.format_exc()
+        else:
+            durations[recipe_status] = time.time() - t1
+
+        if recipe_status in durations:
+            logger.info(
+                "%s: took %s",
+                recipe_status.name,
+                _format_duration(durations[recipe_status]),
+            )
+    return branches, durations, errors
+
+
+def update_status_issue(  # pylint: disable=too-many-locals
+    cci_path,
+    issue_url_list,
+    branch_prefix,
+    force,
+    push_to,
+    status_jobs,
+    no_link_pr,
+):
+    t0 = time.time()
+    recipes = get_recipes_list(cci_path)
+    status = get_status(cci_path, recipes, status_jobs)
+    status = [s for s in status if not s.deprecated]
+    status = list(sorted(status, key=lambda s: s.name))
+    updatable = [s for s in status if s.update_possible()]
+    inconsistent_version = [s for s in status if s.inconsistent_versioning()]
+    up_to_date_count = len([s for s in status if s.up_to_date()])
+    unsupported_count = (
+        len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
+    )
+
+    logger.info("fetching opened PRs")
+    cci_interface.pull_requests()
+
+    branches, durations, errors = update_recipes(
+        updatable, cci_path, branch_prefix, force, push_to
+    )
 
     duration = time.time() - t0
 
     def make_pr_text(status):
         prs = status.prs_opened()
         if prs:
-            return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
+            if no_link_pr:
+                return ", ".join([f"# {pr.number}" for pr in prs])
+            else:
+                return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
 
         branch = branches.get(status)
-        if branch is not None:
-            owner, repo = cci_interface.owner_and_repo(cci_path)
-            return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
+        if branch is None:
+            return "No"
 
-        return "No"
+        owner, repo = cci_interface.owner_and_repo(cci_path)
+        return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
+
+    def make_duration_text(status):
+        if status not in durations:
+            return "skipped"
+        return _format_duration(durations[status])
 
     def str_to_pre(err):
         return "<pre>" + err.replace("\n", "<br/>") + "</pre>"
@@ -139,8 +175,8 @@ def update_status_issue(  # pylint:disable=too-many-locals
             "to automatically generate an update for a recipe.",
             "",
             "### Updatable recipes" "",
-            "|Name|Recipe version|New version|Upstream version|Pull request|",
-            "|----|--------------|-----------|----------------|------------|",
+            "|Name|Recipe version|New version|Upstream version|Pull request|Duration|",
+            "|----|--------------|-----------|----------------|------------|--------|",
         ]
         + [
             "|".join(
@@ -151,6 +187,7 @@ def update_status_issue(  # pylint:disable=too-many-locals
                     f"{s.upstream_version.fixed}",
                     f"{s.upstream_version}",
                     make_pr_text(s),
+                    make_duration_text(s),
                     "",
                 ]
             )
@@ -205,7 +242,9 @@ def update_status_issue(  # pylint:disable=too-many-locals
         for issue_url in issue_url_list:
             this_ok = _update_issue(issue_url, text)
             if this_ok:
-                print(f"Updated {issue_url}")
+                logger.info("updated: %s", issue_url)
+            else:
+                logger.error("error while updating: %s", issue_url)
             ok = ok and this_ok
     else:
         print(text)

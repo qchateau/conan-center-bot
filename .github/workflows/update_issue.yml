@@ -32,8 +32,8 @@ jobs:
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
           git checkout upstream/master
-          git config --global user.email "action@github.com"
-          git config --global user.name "Github Action"
+          git config --global user.email "quentin.chateau@gmail.com"
+          git config --global user.name "Quentin Chateau via Conan Center Bot"
 
       - name: Update CCI status issues
         run: |
