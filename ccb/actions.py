@@ -56,7 +56,7 @@ def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to):
     branches = dict()
     durations = dict()
     for i, recipe_status in enumerate(recipes_status):
-        print(
+        logger.info(  # pylint: disable=logging-fstring-interpolation
             f"===== [{i+1:3}/{len(recipes_status):3}] {' '+recipe_status.name+' ':=^25}====="
         )
 
@@ -238,7 +238,9 @@ def update_status_issue(
         for issue_url in issue_url_list:
             this_ok = _update_issue(issue_url, text)
             if this_ok:
-                print(f"Updated {issue_url}")
+                logger.info("updated: %s", issue_url)
+            else:
+                logger.error("error while updating: %s", issue_url)
             ok = ok and this_ok
     else:
         print(text)
