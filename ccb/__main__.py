@@ -48,6 +48,7 @@ def cmd_update_status_issue(args):
         push_to=args.push_to,
         status_jobs=int(args.jobs),
         branch_prefix=args.branch_prefix,
+        no_link_pr=args.no_link_pr,
     )
 
 
@@ -161,6 +162,11 @@ def main():
         "--branch-prefix",
         default="ccb-",
         help="Branch name prefix.",
+    )
+    parser_uis.add_argument(
+        "--no-link-pr",
+        action="store_true",
+        help="Don't create real link to opened PRs to avoid being referenced by GitHub.",
     )
     parser_uis.add_argument(
         "--force",

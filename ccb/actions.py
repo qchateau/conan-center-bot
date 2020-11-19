@@ -100,13 +100,14 @@ def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to):
     return branches, durations, errors
 
 
-def update_status_issue(
+def update_status_issue(  # pylint: disable=too-many-locals
     cci_path,
     issue_url_list,
     branch_prefix,
     force,
     push_to,
     status_jobs,
+    no_link_pr,
 ):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
@@ -132,14 +133,17 @@ def update_status_issue(
     def make_pr_text(status):
         prs = status.prs_opened()
         if prs:
-            return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
+            if no_link_pr:
+                return ", ".join([f"# {pr.number}" for pr in prs])
+            else:
+                return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
 
         branch = branches.get(status)
-        if branch is not None:
-            owner, repo = cci_interface.owner_and_repo(cci_path)
-            return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
+        if branch is None:
+            return "No"
 
-        return "No"
+        owner, repo = cci_interface.owner_and_repo(cci_path)
+        return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
 
     def make_duration_text(status):
         if status not in durations:

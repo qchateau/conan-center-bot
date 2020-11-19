@@ -59,6 +59,7 @@ jobs:
             --github-token "$GITHUB_TOKEN" \
             --force \
             --push-to origin \
+            --no-link-pr \
             https://github.com/qchateau/conan-center-bot/issues/4
 
       - name: Package
