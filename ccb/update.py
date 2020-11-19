@@ -3,6 +3,7 @@ import re
 import copy
 import logging
 import subprocess
+import multiprocessing
 
 from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
@@ -11,6 +12,7 @@ from .version import Version
 
 
 logger = logging.getLogger(__name__)
+mp_lock = multiprocessing.Lock()
 
 
 class UpdateError(RuntimeError):
@@ -294,7 +296,8 @@ def update_one_recipe(
 
         if run_test:
             logger.info("%s: running test", recipe_name)
-            test_recipe(new_recipe, folder, conan_version)
+            with mp_lock:
+                test_recipe(new_recipe, folder, conan_version)
 
         create_branch_and_commit(
             new_recipe,
