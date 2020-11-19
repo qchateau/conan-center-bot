@@ -1,6 +1,7 @@
 import os
 import re
 import copy
+import time
 import logging
 import subprocess
 import multiprocessing
@@ -9,6 +10,7 @@ from .recipe import Recipe, RecipeError
 from .worktree import RecipeInWorktree
 from .yaml import yaml, DoubleQuotes
 from .version import Version
+from .utils import format_duration
 
 
 logger = logging.getLogger(__name__)
@@ -178,6 +180,9 @@ def add_version(recipe, folder, conan_version, upstream_version):
 
 
 def test_recipe(recipe, folder, version_str):
+    t0 = time.time()
+    logger.info("%s: running test", recipe.name)
+
     version_folder_path = os.path.join(recipe.path, folder)
 
     env = os.environ.copy()
@@ -193,6 +198,7 @@ def test_recipe(recipe, folder, version_str):
     )
 
     logger.debug(ret.stdout.decode())
+    logger.info("%s: test took %s", recipe.name, format_duration(time.time() - t0))
 
     if ret.returncode != 0:
         if not logger.isEnabledFor(logging.DEBUG):
@@ -295,7 +301,6 @@ def update_one_recipe(
         add_version(new_recipe, folder, conan_version, upstream_version)
 
         if run_test:
-            logger.info("%s: running test", recipe_name)
             with mp_lock:
                 test_recipe(new_recipe, folder, conan_version)
 
