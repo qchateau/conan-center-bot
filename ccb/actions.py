@@ -3,6 +3,7 @@ import time
 import datetime
 import logging
 import traceback
+import multiprocessing
 import requests
 
 from . import __version__
@@ -11,23 +12,11 @@ from .status import get_status
 from .github import get_github_token
 from .update import update_one_recipe, BranchAlreadyExists, TestFailed
 from .cci import cci_interface
+from .utils import format_duration
 
 
 ISSUE_URL_RE = re.compile(r"github.com/([^/]+)/([^/]+)/issues/([0-9]+)")
 logger = logging.getLogger(__name__)
-
-
-def _format_duration(duration):
-    hours = int(duration // 3600)
-    duration -= hours * 3600
-    minutes = int(duration // 60)
-    seconds = duration - minutes * 60
-
-    if hours > 0:
-        return f"{hours}h {minutes}m"
-    if minutes > 0:
-        return f"{minutes}m {int(seconds)}s"
-    return f"{seconds:.1f}s"
 
 
 def _update_issue(issue_url, content):
@@ -51,53 +40,55 @@ def _update_issue(issue_url, content):
     return False
 
 
-def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to):
+def _update_one(recipe_status, cci_path, branch_prefix, force, push_to):
+    if recipe_status.prs_opened():
+        logger.info("%s: skipped (PR exists)", recipe_status.name)
+        return None, None
+
+    try:
+        branch_name = update_one_recipe(
+            cci_path=cci_path,
+            recipe_name=recipe_status.name,
+            choose_version=False,
+            folder=None,
+            run_test=True,
+            push_to=push_to,
+            force=force,
+            allow_interaction=False,
+            branch_prefix=branch_prefix,
+        )
+        return branch_name, None
+    except BranchAlreadyExists as exc:
+        logger.info("%s: skipped (%s)", recipe_status.name, str(exc))
+        return exc.branch_name, None
+    except TestFailed as exc:
+        logger.error("%s: test failed", recipe_status.name)
+        return None, exc.details()
+    except Exception as exc:
+        logger.error("%s: %s", recipe_status.name, str(exc))
+        return None, traceback.format_exc()
+
+
+def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to, jobs):
     errors = dict()
     branches = dict()
-    durations = dict()
-    for i, recipe_status in enumerate(recipes_status):
-        logger.info(  # pylint: disable=logging-fstring-interpolation
-            f"===== [{i+1:3}/{len(recipes_status):3}] {' '+recipe_status.name+' ':=^25}====="
-        )
 
-        if recipe_status.prs_opened():
-            logger.info("%s: skipped (PR exists)", recipe_status.name)
-            continue
-
-        try:
-            t1 = time.time()
-            branches[recipe_status] = update_one_recipe(
-                cci_path=cci_path,
-                recipe_name=recipe_status.name,
-                choose_version=False,
-                folder=None,
-                run_test=True,
-                push_to=push_to,
-                force=force,
-                allow_interaction=False,
-                branch_prefix=branch_prefix,
+    with multiprocessing.Pool(jobs) as p:
+        futures = [
+            p.apply_async(
+                _update_one,
+                args=(recipe_status, cci_path, branch_prefix, force, push_to),
             )
-        except BranchAlreadyExists as exc:
-            logger.info("%s: skipped (%s)", recipe_status.name, str(exc))
-            branches[recipe_status] = exc.branch_name
-        except TestFailed as exc:
-            logger.error("%s: test failed", recipe_status.name)
-            durations[recipe_status] = time.time() - t1
-            errors[recipe_status] = exc.details()
-        except Exception as exc:
-            logger.error("%s: %s", recipe_status.name, str(exc))
-            durations[recipe_status] = time.time() - t1
-            errors[recipe_status] = traceback.format_exc()
-        else:
-            durations[recipe_status] = time.time() - t1
+            for recipe_status in recipes_status
+        ]
 
-        if recipe_status in durations:
-            logger.info(
-                "%s: took %s",
-                recipe_status.name,
-                _format_duration(durations[recipe_status]),
-            )
-    return branches, durations, errors
+        for recipe_status, fut in zip(recipes_status, futures):
+            (
+                branches[recipe_status],
+                errors[recipe_status],
+            ) = fut.get()
+
+    return branches, errors
 
 
 def update_status_issue(  # pylint: disable=too-many-locals
@@ -106,12 +97,12 @@ def update_status_issue(  # pylint: disable=too-many-locals
     branch_prefix,
     force,
     push_to,
-    status_jobs,
+    jobs,
     no_link_pr,
 ):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
-    status = get_status(cci_path, recipes, status_jobs)
+    status = get_status(cci_path, recipes, jobs)
     status = [s for s in status if not s.deprecated]
     status = list(sorted(status, key=lambda s: s.name))
     updatable = [s for s in status if s.update_possible()]
@@ -124,8 +115,8 @@ def update_status_issue(  # pylint: disable=too-many-locals
     logger.info("fetching opened PRs")
     cci_interface.pull_requests()
 
-    branches, durations, errors = update_recipes(
-        updatable, cci_path, branch_prefix, force, push_to
+    branches, errors = update_recipes(
+        updatable, cci_path, branch_prefix, force, push_to, jobs
     )
 
     duration = time.time() - t0
@@ -138,17 +129,12 @@ def update_status_issue(  # pylint: disable=too-many-locals
             else:
                 return ", ".join([f"[#{pr.number}]({pr.url})" for pr in prs])
 
-        branch = branches.get(status)
-        if branch is None:
+        branch = branches[status]
+        if not branch:
             return "No"
 
         owner, repo = cci_interface.owner_and_repo(cci_path)
         return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
-
-    def make_duration_text(status):
-        if status not in durations:
-            return "skipped"
-        return _format_duration(durations[status])
 
     def str_to_pre(err):
         return "<pre>" + err.replace("\n", "<br/>") + "</pre>"
@@ -164,7 +150,7 @@ def update_status_issue(  # pylint: disable=too-many-locals
             f"* Updatable recipes: {len(updatable)}",
             f"* Inconsistent recipes: {len(inconsistent_version)}",
             f"* Unsupported recipes: {unsupported_count}",
-            f"* Duration: {_format_duration(duration)}",
+            f"* Duration: {format_duration(duration)}",
             f"* Version: {__version__}",
             "",
             "This list is auto-generated by [Conan Center Bot](https://github.com/qchateau/conan-center-bot) "
@@ -175,8 +161,8 @@ def update_status_issue(  # pylint: disable=too-many-locals
             "to automatically generate an update for a recipe.",
             "",
             "### Updatable recipes" "",
-            "|Name|Recipe version|New version|Upstream version|Pull request|Duration|",
-            "|----|--------------|-----------|----------------|------------|--------|",
+            "|Name|Recipe version|New version|Upstream version|Pull request|",
+            "|----|--------------|-----------|----------------|------------|",
         ]
         + [
             "|".join(
@@ -187,7 +173,6 @@ def update_status_issue(  # pylint: disable=too-many-locals
                     f"{s.upstream_version.fixed}",
                     f"{s.upstream_version}",
                     make_pr_text(s),
-                    make_duration_text(s),
                     "",
                 ]
             )
@@ -234,6 +219,7 @@ def update_status_issue(  # pylint: disable=too-many-locals
             + "</td>"
             + "</tr>"
             for s, error in errors.items()
+            if error is not None
         ]
     )
 

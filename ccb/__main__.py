@@ -46,7 +46,7 @@ def cmd_update_status_issue(args):
         issue_url_list=args.issue_url,
         force=args.force,
         push_to=args.push_to,
-        status_jobs=int(args.jobs),
+        jobs=int(args.jobs),
         branch_prefix=args.branch_prefix,
         no_link_pr=args.no_link_pr,
     )
@@ -179,7 +179,7 @@ def main():
         "--jobs",
         "-j",
         default=str(10 * os.cpu_count()),
-        help="Number of parallel processes during status fetch.",
+        help="Number of parallel processes.",
     )
 
     args = parser.parse_args()
