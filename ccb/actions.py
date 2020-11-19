@@ -51,35 +51,13 @@ def _update_issue(issue_url, content):
     return False
 
 
-def update_status_issue(  # pylint:disable=too-many-locals
-    cci_path,
-    issue_url_list,
-    branch_prefix,
-    force,
-    push_to,
-    status_jobs,
-):
-    t0 = time.time()
-    recipes = get_recipes_list(cci_path)
-    status = get_status(cci_path, recipes, status_jobs)
-    status = [s for s in status if not s.deprecated]
-    status = list(sorted(status, key=lambda s: s.name))
-    updatable = [s for s in status if s.update_possible()]
-    inconsistent_version = [s for s in status if s.inconsistent_versioning()]
-    up_to_date_count = len([s for s in status if s.up_to_date()])
-    unsupported_count = (
-        len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
-    )
-
-    logger.info("fetching opened PRs")
-    cci_interface.pull_requests()
-
+def update_recipes(recipes_status, cci_path, branch_prefix, force, push_to):
     errors = dict()
     branches = dict()
     durations = dict()
-    for i, recipe_status in enumerate(updatable):
+    for i, recipe_status in enumerate(recipes_status):
         print(
-            f"===== [{i+1:3}/{len(updatable):3}] {' '+recipe_status.name+' ':=^25}====="
+            f"===== [{i+1:3}/{len(recipes_status):3}] {' '+recipe_status.name+' ':=^25}====="
         )
 
         if recipe_status.prs_opened():
@@ -119,6 +97,35 @@ def update_status_issue(  # pylint:disable=too-many-locals
                 recipe_status.name,
                 _format_duration(durations[recipe_status]),
             )
+    return branches, durations, errors
+
+
+def update_status_issue(
+    cci_path,
+    issue_url_list,
+    branch_prefix,
+    force,
+    push_to,
+    status_jobs,
+):
+    t0 = time.time()
+    recipes = get_recipes_list(cci_path)
+    status = get_status(cci_path, recipes, status_jobs)
+    status = [s for s in status if not s.deprecated]
+    status = list(sorted(status, key=lambda s: s.name))
+    updatable = [s for s in status if s.update_possible()]
+    inconsistent_version = [s for s in status if s.inconsistent_versioning()]
+    up_to_date_count = len([s for s in status if s.up_to_date()])
+    unsupported_count = (
+        len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
+    )
+
+    logger.info("fetching opened PRs")
+    cci_interface.pull_requests()
+
+    branches, durations, errors = update_recipes(
+        updatable, cci_path, branch_prefix, force, push_to
+    )
 
     duration = time.time() - t0
 
