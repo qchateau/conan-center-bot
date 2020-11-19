@@ -18,11 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 def _format_duration(duration):
-    minutes = duration // 60
-    seconds = duration % 60
+    hours = int(duration // 3600)
+    duration -= hours * 3600
+    minutes = int(duration // 60)
+    seconds = duration - minutes * 60
 
+    if hours > 0:
+        return f"{hours}h {minutes}m"
     if minutes > 0:
-        return f"{int(minutes)}m {int(seconds)}s"
+        return f"{minutes}m {int(seconds)}s"
     return f"{seconds:.1f}s"
 
 
@@ -67,8 +71,12 @@ def update_status_issue(  # pylint:disable=too-many-locals
         len(status) - len(updatable) - len(inconsistent_version) - up_to_date_count
     )
 
+    logger.info("fetching opened PRs")
+    cci_interface.pull_requests()
+
     errors = dict()
     branches = dict()
+    durations = dict()
     for i, recipe_status in enumerate(updatable):
         print(
             f"===== [{i+1:3}/{len(updatable):3}] {' '+recipe_status.name+' ':=^25}====="
@@ -79,6 +87,7 @@ def update_status_issue(  # pylint:disable=too-many-locals
             continue
 
         try:
+            t1 = time.time()
             branches[recipe_status] = update_one_recipe(
                 cci_path=cci_path,
                 recipe_name=recipe_status.name,
@@ -95,10 +104,21 @@ def update_status_issue(  # pylint:disable=too-many-locals
             branches[recipe_status] = exc.branch_name
         except TestFailed as exc:
             logger.error("%s: test failed", recipe_status.name)
+            durations[recipe_status] = time.time() - t1
             errors[recipe_status] = exc.details()
         except Exception as exc:
             logger.error("%s: %s", recipe_status.name, str(exc))
+            durations[recipe_status] = time.time() - t1
             errors[recipe_status] = traceback.format_exc()
+        else:
+            durations[recipe_status] = time.time() - t1
+
+        if recipe_status in durations:
+            logger.info(
+                "%s: took %s",
+                recipe_status.name,
+                _format_duration(durations[recipe_status]),
+            )
 
     duration = time.time() - t0
 
@@ -113,6 +133,11 @@ def update_status_issue(  # pylint:disable=too-many-locals
             return f"[Open one](https://github.com/{owner}/{repo}/pull/new/{branch})"
 
         return "No"
+
+    def make_duration_text(status):
+        if status not in durations:
+            return "skipped"
+        return _format_duration(durations[status])
 
     def str_to_pre(err):
         return "<pre>" + err.replace("\n", "<br/>") + "</pre>"
@@ -139,8 +164,8 @@ def update_status_issue(  # pylint:disable=too-many-locals
             "to automatically generate an update for a recipe.",
             "",
             "### Updatable recipes" "",
-            "|Name|Recipe version|New version|Upstream version|Pull request|",
-            "|----|--------------|-----------|----------------|------------|",
+            "|Name|Recipe version|New version|Upstream version|Pull request|Duration|",
+            "|----|--------------|-----------|----------------|------------|--------|",
         ]
         + [
             "|".join(
@@ -151,6 +176,7 @@ def update_status_issue(  # pylint:disable=too-many-locals
                     f"{s.upstream_version.fixed}",
                     f"{s.upstream_version}",
                     make_pr_text(s),
+                    make_duration_text(s),
                     "",
                 ]
             )
