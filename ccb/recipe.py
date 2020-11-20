@@ -106,8 +106,8 @@ class Recipe:
                 upstream_version or self.upstream.most_recent_version
             )
             homepage = self.upstream.homepage
-            deprecated = getattr(
-                self.conanfile_class(recipe_version), "deprecated", False
+            deprecated = bool(
+                getattr(self.conanfile_class(recipe_version), "deprecated", False)
             )
         except RecipeError as exc:
             logger.debug("%s: could not find version: %s", self.name, exc)

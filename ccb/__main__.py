@@ -7,9 +7,9 @@ import logging
 
 from ccb.recipe import get_recipes_list
 from ccb.status import print_status_table
-from ccb.update import update_recipes
+from ccb.update import manual_update_recipes, auto_update_all_recipes
 from ccb.github import set_github_token
-from ccb.actions import update_status_issue
+from ccb.issue import update_status_issue
 
 
 def bad_command(parser):
@@ -18,6 +18,12 @@ def bad_command(parser):
 
 
 def cmd_status(args):
+    if not args.recipe:
+        args.recipe = get_recipes_list(args.cci)
+    else:
+        # The user specified a list, show it all
+        args.all = True
+
     return print_status_table(
         cci_path=args.cci,
         recipes=args.recipe,
@@ -27,7 +33,10 @@ def cmd_status(args):
 
 
 def cmd_update(args):
-    return update_recipes(
+    if not args.recipe:
+        args.recipe = get_recipes_list(args.cci)
+
+    return manual_update_recipes(
         cci_path=args.cci,
         recipes=args.recipe,
         choose_version=args.choose_version,
@@ -42,13 +51,19 @@ def cmd_update(args):
 
 def cmd_update_status_issue(args):
     return update_status_issue(
-        cci_path=args.cci,
+        update_status_path=args.update_status,
         issue_url_list=args.issue_url,
+        no_link_pr=args.no_link_pr,
+    )
+
+
+def cmd_auto_update_recipes(args):
+    return auto_update_all_recipes(
+        cci_path=args.cci,
         force=args.force,
         push_to=args.push_to,
         jobs=int(args.jobs),
         branch_prefix=args.branch_prefix,
-        no_link_pr=args.no_link_pr,
     )
 
 
@@ -73,11 +88,11 @@ def add_subparser(subparsers, name, function, help_text):
         "--verbose", "-v", action="count", default=0, help="Verbosity level"
     )
     subparser.add_argument("--quiet", "-q", action="store_true")
+    subparser.add_argument("--github-token", help="Github authentication token")
     subparser.add_argument(
         "--cci",
         help="Path to the conan-center-index repository. Defaults to '../conan-center-index'",
     )
-    subparser.add_argument("--github-token", help="Github authentication token")
 
     subparser.set_defaults(func=function)
     return subparser
@@ -96,7 +111,10 @@ def main():
 
     # Status
     parser_status = add_subparser(
-        subparsers, "status", cmd_status, help_text="Display the status of recipes"
+        subparsers,
+        "status",
+        cmd_status,
+        help_text="Display the status of recipes",
     )
     parser_status.add_argument(
         "--all",
@@ -118,7 +136,10 @@ def main():
 
     # Update
     parser_update = add_subparser(
-        subparsers, "update", cmd_update, help_text="Auto-update a list of recipes"
+        subparsers,
+        "update",
+        cmd_update,
+        help_text="Auto-update a list of recipes",
     )
     parser_update.add_argument(
         "recipe",
@@ -150,6 +171,32 @@ def main():
         "--no-test", action="store_true", help="Do not test the updated recipe"
     )
 
+    # Auto update recipes
+    parser_aur = add_subparser(
+        subparsers,
+        "auto-update-recipes",
+        cmd_auto_update_recipes,
+        help_text="Auto update recipes.",
+    )
+    parser_aur.add_argument(
+        "--branch-prefix",
+        default="ccb-",
+        help="Branch name prefix.",
+    )
+    parser_aur.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite the branch if it exists, force push if the remote branch exists.",
+    )
+    parser_aur.add_argument("--push-to", help="Remote name to push new branches to")
+    parser_aur.add_argument(
+        "--jobs",
+        "-j",
+        default=str(10 * os.cpu_count()),
+        help="Number of parallel processes.",
+    )
+
     # Update status issue
     parser_uis = add_subparser(
         subparsers,
@@ -157,31 +204,15 @@ def main():
         cmd_update_status_issue,
         help_text="Update the status issue",
     )
-    parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
     parser_uis.add_argument(
-        "--branch-prefix",
-        default="ccb-",
-        help="Branch name prefix.",
+        "update_status", help="Path to the JSON file containing the update status"
     )
+    parser_uis.add_argument("issue_url", nargs="*", help="URL of the issues to update")
     parser_uis.add_argument(
         "--no-link-pr",
         action="store_true",
         help="Don't create real link to opened PRs to avoid being referenced by GitHub.",
     )
-    parser_uis.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="Overwrite the branch if it exists, force push if the remote branch exists.",
-    )
-    parser_uis.add_argument("--push-to", help="Remote name to push new branches to")
-    parser_uis.add_argument(
-        "--jobs",
-        "-j",
-        default=str(10 * os.cpu_count()),
-        help="Number of parallel processes.",
-    )
-
     args = parser.parse_args()
 
     if args.github_token:
@@ -191,17 +222,7 @@ def main():
 
     if not args.cci:
         args.cci = os.path.realpath(os.path.join("..", "conan-center-index"))
-
     args.cci = os.path.abspath(args.cci)
-    if not os.path.exists(args.cci):
-        print(f"CCI repository not found at {args.cci}")
-        sys.exit(1)
-
-    if not hasattr(args, "recipe") or not args.recipe:
-        args.recipe = get_recipes_list(args.cci)
-    else:
-        # The user specified a list, show it all
-        args.all = True
 
     try:
         sys.exit(args.func(args))

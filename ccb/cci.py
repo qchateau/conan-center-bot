@@ -70,10 +70,10 @@ class _CciInterface:
         ]
 
     @staticmethod
-    def owner_and_repo(cci_path):
+    def owner_and_repo(cci_path, remote):
         pattern = re.compile(r"[/:]([^/]+)/([^/]+)\.git")
         origin = subprocess.check_output(
-            ["git", "config", "--get", "remote.origin.url"], cwd=cci_path
+            ["git", "config", "--get", f"remote.{remote}.url"], cwd=cci_path
         ).decode()
         return pattern.search(origin).groups()
 
