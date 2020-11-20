@@ -1,0 +1,49 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "eslint.validate": ["vue", "html", "javascript"],
+    // disable format of JS by vetur, formatting is handled by "source.fixAll.eslint"
+    "vetur.format.defaultFormatter.js": "none",
+    "vetur.format.defaultFormatter.css": "prettier",
+    "vetur.format.defaultFormatter.html": "prettyhtml",
+    "vetur.format.defaultFormatter.less": "prettier",
+    "vetur.format.defaultFormatter.postcss": "prettier",
+    "vetur.format.defaultFormatter.scss": "prettier",
+    "vetur.format.defaultFormatter.stylus": "stylus-supremacy",
+    "vetur.format.defaultFormatter.ts": "none",
+    "[javascript]": {
+      // disable format on save at vscode level, formatting is handled by "source.fixAll.eslint"
+      "editor.formatOnSave": false,
+      "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": true
+      }
+    },
+    "[vue]": {
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": true
+      }
+    },
+    "[python]": {
+      "editor.formatOnSave": true
+    },
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.formatting.provider": "black",
+    "python.linting.lintOnSave": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "files.trimTrailingWhitespace": true,
+    "formattingToggle.affects": ["formatOnSave"]
+  },
+  "extensions": {
+    "recommendations": [
+      "xyz.local-history", // local history
+      "dbaeumer.vscode-eslint", // JS+vue lint, format and autofix
+      "octref.vetur" // vue support and format
+    ]
+  }
+}
