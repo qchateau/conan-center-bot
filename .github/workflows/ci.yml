@@ -7,6 +7,32 @@ env:
   PYTHONUNBUFFERED: 1
 
 jobs:
+  ci-frontend:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Setup npm
+        uses: actions/setup-node@v2-beta
+        with:
+          node-version: "12"
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Build static site
+        run: |
+          cd ccb-frontend
+          npm install
+          npm run build
+
+      - name: Deploy site
+        if: github.ref == 'refs/heads/master'
+        uses: JamesIves/github-pages-deploy-action@3.7.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: ccb-frontend/dist
+          CLEAN: true
+
   ci:
     runs-on: ubuntu-20.04
     steps:
@@ -82,23 +108,24 @@ jobs:
             --github-token "$GITHUB_TOKEN" \
             --force \
             --push-to origin \
-            > ./status/v1-update-dev.json
-          cat ./status/v1-update-dev.json
+            > ./status/v1-update.json
+          cat ./status/v1-update.json
+
       - name: Update dev issue
         run: |
           conan-center-bot update-status-issue \
             --no-link-pr \
             --github-token "$GITHUB_TOKEN" \
-            ./status/v1-update-dev.json \
+            ./status/v1-update.json \
             https://github.com/qchateau/conan-center-bot/issues/4
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@3.7.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages
+          BRANCH: status
           FOLDER: status
-          TARGET_FOLDER: status
+          TARGET_FOLDER: dev
           CLEAN: false
 
       - name: Package

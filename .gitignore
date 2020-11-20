@@ -2,7 +2,7 @@
 .vscode/
 .venv/
 dist/
-build/
+node_modules/
 *.egg-info/
 
 *.pyc

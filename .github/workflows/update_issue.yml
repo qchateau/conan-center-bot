@@ -69,13 +69,22 @@ jobs:
             --github-token "$GITHUB_TOKEN" \
             --force \
             --push-to origin \
-            > ./update_status.json
-          cat ./update_status.json
+            > ./status/v1-update.json
+          cat ./status/v1-update.json
 
       - name: Update status issue
         run: |
           conan-center-bot update-status-issue \
             --github-token "$GITHUB_TOKEN" \
-            ./update_status.json \
+            ./status/v1-update.json \
             https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@3.7.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: status
+          FOLDER: status
+          TARGET_FOLDER: prod
+          CLEAN: false

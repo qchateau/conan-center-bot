@@ -8,10 +8,22 @@ all recipes's upstream to try to find which recipes can be updated.
 It can then either generates the list of updatable recipes, or
 automatically update a recipe to the latest upstream version.
 
-This library is used to keep https://github.com/conan-io/conan-center-index/issues/3470
-and https://github.com/qchateau/conan-center-bot/issues/1 up to date.
+## How to use the data
 
-## How to use it
+### Human-readable
+
+You can check the [status page](https://qchateau.github.io/conan-center-bot/)
+or the github issues https://github.com/conan-io/conan-center-index/issues/3470 and
+https://github.com/qchateau/conan-center-bot/issues/1.
+
+### API
+
+You can get the updatability status of CCI recipes by reading the
+files in https://github.com/qchateau/conan-center-bot/tree/status.
+
+They are auto-updated daily using Github Actions.
+
+## How to use the library
 
 ### Install from pypi
 
