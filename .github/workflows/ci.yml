@@ -37,6 +37,15 @@ jobs:
           ccache -s
           echo "/usr/lib/ccache" >> $GITHUB_PATH
 
+      - name: Install and configure conan
+        run: |
+          python3 -m pip install conan
+          conan config install https://github.com/conan-io/hooks.git -sf hooks -tf hooks
+          conan config set hooks.conan-center
+          conan profile new default --detect
+          conan profile update settings.compiler.libcxx=libstdc++11 default
+          conan profile show default
+
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -46,15 +55,6 @@ jobs:
           CCB_VERSION=${GITHUB_REF:10}
           echo "Version: $CCB_VERSION"
           sed -i "s/\"0.0.0\"/\"$CCB_VERSION\"/" ccb/_version.py
-
-      - name: Install and configure conan
-        run: |
-          python3 -m pip install conan
-          conan config install https://github.com/conan-io/hooks.git -sf hooks -tf hooks
-          conan config set hooks.conan-center
-          conan profile new default --detect
-          conan profile update settings.compiler.libcxx=libstdc++11 default
-          conan profile show default
 
       - name: Install CCB locally
         run: python3 -m pip install .
@@ -74,15 +74,32 @@ jobs:
           git config --global user.email "quentin.chateau@gmail.com"
           git config --global user.name "Quentin Chateau via Conan Center Bot"
 
-      - name: Update dev issues
+      - name: Update recipes
         run: |
-          conan-center-bot update-status-issue \
+          mkdir status
+          conan-center-bot auto-update-recipes \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
             --force \
             --push-to origin \
+            > ./status/v1-update-dev.json
+          cat ./status/v1-update-dev.json
+      - name: Update dev issue
+        run: |
+          conan-center-bot update-status-issue \
             --no-link-pr \
+            --github-token "$GITHUB_TOKEN" \
+            ./status/v1-update-dev.json \
             https://github.com/qchateau/conan-center-bot/issues/4
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@3.7.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: status
+          TARGET_FOLDER: status
+          CLEAN: false
 
       - name: Package
         run: python3 setup.py sdist

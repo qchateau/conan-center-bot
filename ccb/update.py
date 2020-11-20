@@ -1,16 +1,23 @@
 import os
 import re
 import copy
+import json
 import time
+import typing
+import datetime
 import logging
+import traceback
 import subprocess
 import multiprocessing
 
-from .recipe import Recipe, RecipeError
+from . import __version__
+from .recipe import Recipe, RecipeError, get_recipes_list
 from .worktree import RecipeInWorktree
 from .yaml import yaml, DoubleQuotes
 from .version import Version
+from .cci import cci_interface
 from .utils import format_duration
+from .status import get_status
 
 
 logger = logging.getLogger(__name__)
@@ -62,9 +69,19 @@ class TestFailed(UpdateError):
 
 
 class BranchAlreadyExists(UpdateError):
-    def __init__(self, branch_name):
-        super().__init__(f"branch already exists: {branch_name}")
+    def __init__(self, branch_name, remote=None):
+        super().__init__(
+            f"branch already exists: {remote+'/' if remote else ''}{branch_name}"
+        )
         self.branch_name = branch_name
+        self.remote = remote
+
+
+class UpdateStatus(typing.NamedTuple):
+    branch_name: typing.Optional[str] = None
+    branch_remote_owner: typing.Optional[str] = None
+    branch_remote_repo: typing.Optional[str] = None
+    error: typing.Optional[str] = None
 
 
 def yn_question(question, default):
@@ -245,9 +262,8 @@ def _get_user_choice_upstream_version(recipe):
 
 
 def update_one_recipe(
-    cci_path,
-    recipe_name,
-    choose_version,
+    recipe,
+    upstream_version,
     folder,
     run_test,
     push_to,
@@ -255,14 +271,10 @@ def update_one_recipe(
     allow_interaction,
     branch_prefix,
 ):
-    recipe = Recipe(cci_path, recipe_name)
+    assert isinstance(recipe, Recipe)
+
     if getattr(recipe.conanfile_class, "deprecated", False):
         raise RecipeDeprecated("recipe is deprecated")
-
-    if choose_version:
-        upstream_version = _get_user_choice_upstream_version(recipe)
-    else:
-        upstream_version = _get_most_recent_upstream_version(recipe)
 
     conan_version = upstream_version.fixed
     branch_name = f"{branch_prefix}{recipe.name}-{conan_version}"
@@ -284,13 +296,13 @@ def update_one_recipe(
                 False,
             )
         if not force_push:
-            raise BranchAlreadyExists(branch_name)
+            raise BranchAlreadyExists(branch_name, push_to)
 
     folder = folder or recipe.folder(recipe.most_recent_version)
 
     logger.info(
         "%s: adding version %s to folder %s in branch %s from upstream version %s",
-        recipe_name,
+        recipe.name,
         conan_version,
         folder,
         branch_name,
@@ -312,12 +324,12 @@ def update_one_recipe(
         )
 
         if push_to:
-            logger.info("%s: pushing", recipe_name)
+            logger.info("%s: pushing", recipe.name)
             push_branch(new_recipe, push_to, branch_name, force_push)
 
     logger.info(
         "%s: created version %s in branch %s (%s)",
-        recipe_name,
+        recipe.name,
         conan_version,
         branch_name,
         "pushed" if push_to else "not pushed",
@@ -326,7 +338,126 @@ def update_one_recipe(
     return branch_name
 
 
-def update_recipes(
+def _auto_update_one_recipe(recipe_name, cci_path, branch_prefix, force, push_to):
+    recipe = Recipe(cci_path, recipe_name)
+    recipe_status = recipe.status()
+
+    if recipe_status.prs_opened():
+        logger.info("%s: skipped (PR exists)", recipe.name)
+        return UpdateStatus(None, None, None, None)
+
+    error = branch_name = branch_remote_owner = branch_remote_repo = None
+    try:
+        branch_name = update_one_recipe(
+            recipe=recipe,
+            upstream_version=recipe_status.upstream_version,
+            folder=None,
+            run_test=True,
+            push_to=push_to,
+            force=force,
+            allow_interaction=False,
+            branch_prefix=branch_prefix,
+        )
+        if push_to:
+            branch_remote_owner, branch_remote_repo = cci_interface.owner_and_repo(
+                cci_path,
+                push_to,
+            )
+    except BranchAlreadyExists as exc:
+        logger.info("%s: skipped (%s)", recipe.name, str(exc))
+        branch_name = exc.branch_name
+        if exc.remote:
+            branch_remote_owner, branch_remote_repo = cci_interface.owner_and_repo(
+                cci_path,
+                exc.remote,
+            )
+    except TestFailed as exc:
+        logger.error("%s: test failed", recipe.name)
+        error = exc.details()
+    except Exception as exc:
+        logger.error("%s: %s", recipe.name, str(exc))
+        error = traceback.format_exc()
+    return UpdateStatus(branch_name, branch_remote_owner, branch_remote_repo, error)
+
+
+def _auto_update_recipes(recipe_names, cci_path, branch_prefix, force, push_to, jobs):
+    with multiprocessing.Pool(jobs) as p:
+        futures = [
+            p.apply_async(
+                _auto_update_one_recipe,
+                args=(recipe_name, cci_path, branch_prefix, force, push_to),
+            )
+            for recipe_name in recipe_names
+        ]
+
+        return {
+            recipe_name: fut.get() for recipe_name, fut in zip(recipe_names, futures)
+        }
+
+
+def auto_update_all_recipes(cci_path, branch_prefix, force, push_to, jobs):
+    t0 = time.time()
+    recipes = get_recipes_list(cci_path)
+    status = get_status(cci_path, recipes, jobs)
+    status = [s for s in status if not s.deprecated]
+    status = list(sorted(status, key=lambda s: s.name))
+    updatable = [s for s in status if s.update_possible()]
+
+    logger.info("fetching opened PRs")
+    cci_interface.pull_requests()
+
+    update_status = _auto_update_recipes(
+        [s.name for s in updatable],
+        cci_path,
+        branch_prefix,
+        force,
+        push_to,
+        jobs,
+    )
+
+    duration = time.time() - t0
+
+    def _generate_recipe_update_status(status):
+        update = update_status.get(status.name, UpdateStatus())
+        return {
+            "name": status.name,
+            "homepage": status.homepage,
+            "recipe_version": status.recipe_version.original,
+            "upstream_version": status.upstream_version.fixed,
+            "upstream_tag": status.upstream_version.original,
+            "deprecated": status.deprecated,
+            "inconsistent_versioning": status.inconsistent_versioning(),
+            "updatable": status.update_possible(),
+            "up_to_date": status.up_to_date(),
+            "supported": not status.deprecated
+            and status.update_possible()
+            or status.up_to_date(),
+            "prs_opened": [
+                {
+                    "number": pr.number,
+                    "url": pr.url,
+                }
+                for pr in status.prs_opened()
+            ],
+            "updated_branch": {
+                "owner": update.branch_remote_owner,
+                "repo": update.branch_remote_repo,
+                "branch": update.branch_name,
+            },
+            "update_error": update.error,
+        }
+
+    status = {
+        "date": datetime.datetime.now().isoformat(),
+        "duration": duration,
+        "ccb_version": __version__,
+        "recipes": [_generate_recipe_update_status(s) for s in status],
+    }
+    print(json.dumps(status))
+    return 0
+
+
+def manual_update_recipes(
     cci_path,
     recipes,
     choose_version,
@@ -338,12 +469,18 @@ def update_recipes(
     branch_prefix,
 ):
     ok = True
-    for recipe in recipes:
+    for recipe_name in recipes:
         try:
+            recipe = Recipe(cci_path, recipe_name)
+
+            if choose_version:
+                upstream_version = _get_user_choice_upstream_version(recipe)
+            else:
+                upstream_version = _get_most_recent_upstream_version(recipe)
+
             update_one_recipe(
-                cci_path,
                 recipe,
-                choose_version,
+                upstream_version,
                 folder,
                 run_test,
                 push_to,

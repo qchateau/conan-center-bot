@@ -49,6 +49,9 @@ jobs:
           conan profile update settings.compiler.libcxx=libstdc++11 default
           conan profile show default
 
+      - name: Install CCB
+        run: python3 -m pip install conan-center-bot
+
       - name: Clone CCI
         run: |
           git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
@@ -59,13 +62,20 @@ jobs:
           git config --global user.email "quentin.chateau@gmail.com"
           git config --global user.name "Quentin Chateau via Conan Center Bot"
 
-      - name: Update CCI status issues
+      - name: Update recipes
         run: |
-          python3 -m pip install conan-center-bot
-          conan-center-bot update-status-issue \
+          conan-center-bot auto-update-recipes \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
             --force \
             --push-to origin \
+            > ./update_status.json
+          cat ./update_status.json
+
+      - name: Update status issue
+        run: |
+          conan-center-bot update-status-issue \
+            --github-token "$GITHUB_TOKEN" \
+            ./update_status.json \
             https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
