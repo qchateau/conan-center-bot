@@ -64,6 +64,7 @@ jobs:
 
       - name: Update recipes
         run: |
+          mkdir status
           conan-center-bot auto-update-recipes \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
