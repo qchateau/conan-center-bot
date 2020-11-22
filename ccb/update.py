@@ -328,7 +328,8 @@ async def update_one_recipe(
             new_recipe,
             branch_name,
             f"{recipe.name}: add version {conan_version}\n\n"
-            "Generated and committed by [conan-center-bot](https://github.com/qchateau/conan-center-bot)",
+            "Generated and committed by [Conan Center Bot](https://github.com/qchateau/conan-center-bot)\n"
+            "Find more updatable recipes in the [GitHub Pages](https://qchateau.github.io/conan-center-bot/)",
         )
 
         if push_to:
