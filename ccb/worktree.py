@@ -1,9 +1,9 @@
 import os
 import tempfile
-import subprocess
 import shutil
 
 from .recipe import Recipe
+from .subprocess import call, check_call
 
 
 class RecipeInWorktree:
@@ -11,10 +11,10 @@ class RecipeInWorktree:
         self.recipe = recipe
         self.tmpdir = None
 
-    def __enter__(self):
+    async def __aenter__(self):
         self.tmpdir = tempfile.mkdtemp(prefix="ccb-")
         try:
-            subprocess.check_call(
+            await check_call(
                 ["git", "worktree", "add", "-q", "--checkout", "--detach", self.tmpdir],
                 cwd=self.recipe.path,
             )
@@ -23,14 +23,14 @@ class RecipeInWorktree:
             self.cleanup()
             raise
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.cleanup()
+    async def __aexit__(self, exc_type, exc_value, exc_traceback):
+        await self.cleanup()
 
-    def cleanup(self):
+    async def cleanup(self):
         if self.tmpdir is None:
             return
 
-        subprocess.call(
+        await call(
             ["git", "worktree", "remove", "-f", self.tmpdir], cwd=self.recipe.path
         )
         if os.path.exists(self.tmpdir):

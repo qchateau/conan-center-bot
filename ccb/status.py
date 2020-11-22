@@ -1,5 +1,5 @@
 import logging
-from multiprocessing import Pool
+import asyncio
 
 from terminaltables import AsciiTable
 from colored import fg, stylize
@@ -10,23 +10,16 @@ from . import __version__
 logger = logging.getLogger(__name__)
 
 
-def status_one_recipe(cci_path, recipe_name):
-    return Recipe(cci_path, recipe_name).status()
-
-
-def get_status(cci_path, recipes, jobs):
+async def get_status(cci_path, recipes):
     logger.info("Parsing %s recipes...", len(recipes))
 
-    with Pool(jobs) as p:
-        status_futures = [
-            p.apply_async(status_one_recipe, args=(cci_path, recipe))
-            for recipe in recipes
-        ]
-        return [f.get() for f in status_futures]
+    return await asyncio.gather(
+        *[Recipe(cci_path, recipe).status() for recipe in recipes]
+    )
 
 
-def print_status_table(cci_path, recipes, print_all, jobs):
-    status = get_status(cci_path, recipes, jobs)
+async def print_status_table(cci_path, recipes, print_all):
+    status = await get_status(cci_path, recipes)
     table_data = [
         ["Name", "Recipe version", "New version", "Upstream version", "Pending PR"]
     ]
@@ -53,7 +46,7 @@ def print_status_table(cci_path, recipes, print_all, jobs):
         else:
             name_color = fg("red")
 
-        prs = s.prs_opened()
+        prs = await s.prs_opened()
         pr_text = str(len(prs))
 
         rv_color = fg("green") if not s.recipe_version.unknown else fg("dark_gray")

@@ -4,11 +4,11 @@ import copy
 import json
 import time
 import typing
-import datetime
+import asyncio
 import logging
+import datetime
 import traceback
 import subprocess
-import multiprocessing
 
 from . import __version__
 from .recipe import Recipe, RecipeError, get_recipes_list
@@ -18,10 +18,10 @@ from .version import Version
 from .cci import cci_interface
 from .utils import format_duration
 from .status import get_status
+from .subprocess import run, call, check_call
 
 
 logger = logging.getLogger(__name__)
-mp_lock = multiprocessing.Lock()
 
 
 class UpdateError(RuntimeError):
@@ -52,13 +52,9 @@ class TestFailed(UpdateError):
         re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
     ]
 
-    def __init__(self, complete_process):
+    def __init__(self, output):
         super().__init__("Test failed")
-        self.complete_process = complete_process
-
-    @property
-    def output(self):
-        return self.complete_process.stdout.decode()
+        self.output = output
 
     def details(self):
         for regex in self.RE_ERRORS:
@@ -96,9 +92,9 @@ def yn_question(question, default):
             return False
 
 
-def branch_exists(recipe, branch_name):
+async def branch_exists(recipe, branch_name):
     return (
-        subprocess.call(
+        await call(
             ["git", "show-ref", "--verify", "-q", f"refs/heads/{branch_name}"],
             cwd=recipe.path,
         )
@@ -106,9 +102,9 @@ def branch_exists(recipe, branch_name):
     )
 
 
-def remote_branch_exists(recipe, branch_name, remote):
+async def remote_branch_exists(recipe, branch_name, remote):
     return (
-        subprocess.call(
+        await call(
             [
                 "git",
                 "show-ref",
@@ -122,9 +118,9 @@ def remote_branch_exists(recipe, branch_name, remote):
     )
 
 
-def create_branch_and_commit(recipe, branch_name, commit_msg):
-    subprocess.check_call(["git", "checkout", "-q", "-b", branch_name], cwd=recipe.path)
-    subprocess.check_call(
+async def create_branch_and_commit(recipe, branch_name, commit_msg):
+    await check_call(["git", "checkout", "-q", "-b", branch_name], cwd=recipe.path)
+    await check_call(
         [
             "git",
             "commit",
@@ -137,23 +133,27 @@ def create_branch_and_commit(recipe, branch_name, commit_msg):
     )
 
 
-def remove_branch(recipe, branch_name):
-    subprocess.check_call(["git", "branch", "-q", "-D", branch_name], cwd=recipe.path)
+async def remove_branch(recipe, branch_name):
+    await check_call(["git", "branch", "-q", "-D", branch_name], cwd=recipe.path)
 
 
-def push_branch(recipe, remote, branch_name, force):
-    subprocess.check_output(
+async def push_branch(recipe, remote, branch_name, force):
+    await check_call(
         ["git", "push", "-q", "--set-upstream"]
         + (["-f"] if force else [])
         + [remote, branch_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         cwd=recipe.path,
     )
 
 
-def add_version(recipe, folder, conan_version, upstream_version):
-    most_recent_version = recipe.most_recent_version.original
+async def add_version(recipe, folder, conan_version, upstream_version):
+    most_recent_version = recipe.most_recent_version().original
     url = recipe.upstream.source_url(upstream_version)
-    hash_digest = recipe.upstream.source_sha256_digest(upstream_version)
+
+    logger.debug("%s: downloading source and computing its sha256 digest", recipe.name)
+    hash_digest = await recipe.upstream.source_sha256_digest(upstream_version)
 
     def smart_insert(container, key, value):
         container_keys = list(container.keys())
@@ -172,6 +172,7 @@ def add_version(recipe, folder, conan_version, upstream_version):
                     break
             container.insert(insert_idx, key, value)
 
+    logger.debug("%s: patching files", recipe.name)
     config = recipe.config()
     smart_insert(config["versions"], DoubleQuotes(conan_version), {})
     config["versions"][conan_version]["folder"] = folder
@@ -196,7 +197,7 @@ def add_version(recipe, folder, conan_version, upstream_version):
         yaml.dump(conandata, fil)
 
 
-def test_recipe(recipe, folder, version_str):
+async def test_recipe(recipe, folder, version_str):
     t0 = time.time()
     logger.info("%s: running test", recipe.name)
 
@@ -205,26 +206,30 @@ def test_recipe(recipe, folder, version_str):
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    ret = subprocess.run(
+    proc = await run(
         ["conan", "create", ".", f"{recipe.name}/{version_str}@"],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=version_folder_path,
-        check=False,
     )
+    await proc.wait()
 
-    logger.debug(ret.stdout.decode())
+    if proc.returncode != 0 or logger.isEnabledFor(logging.DEBUG):
+        output = (await proc.stdout.read()).decode()
+    else:
+        output = None
+    logger.debug(output)
     logger.info("%s: test took %s", recipe.name, format_duration(time.time() - t0))
 
-    if ret.returncode != 0:
+    if proc.returncode != 0:
         if not logger.isEnabledFor(logging.DEBUG):
-            logger.info(ret.stdout.decode())
-        raise TestFailed(ret)
+            logger.info(output)
+        raise TestFailed(output)
 
 
-def _get_most_recent_upstream_version(recipe):
-    status = recipe.status()
+async def _get_most_recent_upstream_version(recipe):
+    status = await recipe.status()
 
     if status.up_to_date():
         raise RecipeNotUpdatable("recipe is up-to-date")
@@ -238,11 +243,13 @@ def _get_most_recent_upstream_version(recipe):
     return upstream_version
 
 
-def _get_user_choice_upstream_version(recipe):
-    recipe_versions_fixed = [v.fixed for v in recipe.versions]
+async def _get_user_choice_upstream_version(recipe):
+    recipe_versions_fixed = [v.fixed for v in recipe.versions()]
     versions = list(
         sorted(
-            v for v in recipe.upstream.versions if v.fixed not in recipe_versions_fixed
+            v
+            for v in await recipe.upstream.versions()
+            if v.fixed not in recipe_versions_fixed
         )
     )
     if not versions:
@@ -261,7 +268,7 @@ def _get_user_choice_upstream_version(recipe):
     return upstream_version
 
 
-def update_one_recipe(
+async def update_one_recipe(
     recipe,
     upstream_version,
     folder,
@@ -270,6 +277,7 @@ def update_one_recipe(
     force,
     allow_interaction,
     branch_prefix,
+    test_lock,
 ):
     assert isinstance(recipe, Recipe)
 
@@ -280,16 +288,16 @@ def update_one_recipe(
     branch_name = f"{branch_prefix}{recipe.name}-{conan_version}"
     force_push = force
 
-    if branch_exists(recipe, branch_name):
+    if await branch_exists(recipe, branch_name):
         if allow_interaction and not force:
             force = yn_question(
                 f"Branch '{branch_name}' already exists, overwrite ?", False
             )
         if not force:
             raise BranchAlreadyExists(branch_name)
-        remove_branch(recipe, branch_name)
+        await remove_branch(recipe, branch_name)
 
-    if remote_branch_exists(recipe, branch_name, push_to):
+    if await remote_branch_exists(recipe, branch_name, push_to):
         if allow_interaction and not force_push:
             force_push = yn_question(
                 f"Remote branch '{push_to}/{branch_name}' already exists, overwrite ?",
@@ -298,7 +306,7 @@ def update_one_recipe(
         if not force_push:
             raise BranchAlreadyExists(branch_name, push_to)
 
-    folder = folder or recipe.folder(recipe.most_recent_version)
+    folder = folder or recipe.folder(recipe.most_recent_version())
 
     logger.info(
         "%s: adding version %s to folder %s in branch %s from upstream version %s",
@@ -309,14 +317,14 @@ def update_one_recipe(
         upstream_version,
     )
 
-    with RecipeInWorktree(recipe) as new_recipe:
-        add_version(new_recipe, folder, conan_version, upstream_version)
+    async with RecipeInWorktree(recipe) as new_recipe:
+        await add_version(new_recipe, folder, conan_version, upstream_version)
 
         if run_test:
-            with mp_lock:
-                test_recipe(new_recipe, folder, conan_version)
+            async with test_lock:
+                await test_recipe(new_recipe, folder, conan_version)
 
-        create_branch_and_commit(
+        await create_branch_and_commit(
             new_recipe,
             branch_name,
             f"{recipe.name}: add version {conan_version}\n\n"
@@ -325,7 +333,7 @@ def update_one_recipe(
 
         if push_to:
             logger.info("%s: pushing", recipe.name)
-            push_branch(new_recipe, push_to, branch_name, force_push)
+            await push_branch(new_recipe, push_to, branch_name, force_push)
 
     logger.info(
         "%s: created version %s in branch %s (%s)",
@@ -338,17 +346,24 @@ def update_one_recipe(
     return branch_name
 
 
-def _auto_update_one_recipe(recipe_name, cci_path, branch_prefix, force, push_to):
+async def _auto_update_one_recipe(
+    recipe_name,
+    cci_path,
+    branch_prefix,
+    force,
+    push_to,
+    test_lock,
+):
     recipe = Recipe(cci_path, recipe_name)
-    recipe_status = recipe.status()
+    recipe_status = await recipe.status()
 
-    if recipe_status.prs_opened():
+    if await recipe_status.prs_opened():
         logger.info("%s: skipped (PR exists)", recipe.name)
         return UpdateStatus(None, None, None, None)
 
     error = branch_name = branch_remote_owner = branch_remote_repo = None
     try:
-        branch_name = update_one_recipe(
+        branch_name = await update_one_recipe(
             recipe=recipe,
             upstream_version=recipe_status.upstream_version,
             folder=None,
@@ -357,9 +372,13 @@ def _auto_update_one_recipe(recipe_name, cci_path, branch_prefix, force, push_to
             force=force,
             allow_interaction=False,
             branch_prefix=branch_prefix,
+            test_lock=test_lock,
         )
         if push_to:
-            branch_remote_owner, branch_remote_repo = cci_interface.owner_and_repo(
+            (
+                branch_remote_owner,
+                branch_remote_repo,
+            ) = await cci_interface.owner_and_repo(
                 cci_path,
                 push_to,
             )
@@ -367,7 +386,10 @@ def _auto_update_one_recipe(recipe_name, cci_path, branch_prefix, force, push_to
         logger.info("%s: skipped (%s)", recipe.name, str(exc))
         branch_name = exc.branch_name
         if exc.remote:
-            branch_remote_owner, branch_remote_repo = cci_interface.owner_and_repo(
+            (
+                branch_remote_owner,
+                branch_remote_repo,
+            ) = await cci_interface.owner_and_repo(
                 cci_path,
                 exc.remote,
             )
@@ -380,44 +402,44 @@ def _auto_update_one_recipe(recipe_name, cci_path, branch_prefix, force, push_to
     return UpdateStatus(branch_name, branch_remote_owner, branch_remote_repo, error)
 
 
-def _auto_update_recipes(recipe_names, cci_path, branch_prefix, force, push_to, jobs):
-    with multiprocessing.Pool(jobs) as p:
-        futures = [
-            p.apply_async(
-                _auto_update_one_recipe,
-                args=(recipe_name, cci_path, branch_prefix, force, push_to),
-            )
-            for recipe_name in recipe_names
-        ]
-
-        return {
-            recipe_name: fut.get() for recipe_name, fut in zip(recipe_names, futures)
-        }
-
-
-def auto_update_all_recipes(cci_path, branch_prefix, force, push_to, jobs):
+async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
-    status = get_status(cci_path, recipes, jobs)
+
+    # fetch PRs while getting status, it will be cached for later
+    status, _ = await asyncio.gather(
+        get_status(cci_path, recipes),
+        cci_interface.pull_requests(),
+    )
+
     status = [s for s in status if not s.deprecated]
     status = list(sorted(status, key=lambda s: s.name))
     updatable = [s for s in status if s.update_possible()]
+    updatable_names = [s.name for s in updatable]
 
-    logger.info("fetching opened PRs")
-    cci_interface.pull_requests()
-
-    update_status = _auto_update_recipes(
-        [s.name for s in updatable],
-        cci_path,
-        branch_prefix,
-        force,
-        push_to,
-        jobs,
+    test_lock = asyncio.Lock()
+    update_status = dict(
+        zip(
+            updatable_names,
+            await asyncio.gather(
+                *[
+                    _auto_update_one_recipe(
+                        recipe_name,
+                        cci_path,
+                        branch_prefix,
+                        force,
+                        push_to,
+                        test_lock,
+                    )
+                    for recipe_name in updatable_names
+                ]
+            ),
+        )
     )
 
     duration = time.time() - t0
 
-    def _generate_recipe_update_status(status):
+    async def _generate_recipe_update_status(status):
         update = update_status.get(status.name, UpdateStatus())
         return {
             "name": status.name,
@@ -437,7 +459,7 @@ def auto_update_all_recipes(cci_path, branch_prefix, force, push_to, jobs):
                     "number": pr.number,
                     "url": pr.url,
                 }
-                for pr in status.prs_opened()
+                for pr in await status.prs_opened()
             ],
             "updated_branch": {
                 "owner": update.branch_remote_owner,
@@ -451,13 +473,13 @@ def auto_update_all_recipes(cci_path, branch_prefix, force, push_to, jobs):
         "date": datetime.datetime.now().isoformat(),
         "duration": duration,
         "ccb_version": __version__,
-        "recipes": [_generate_recipe_update_status(s) for s in status],
+        "recipes": [await _generate_recipe_update_status(s) for s in status],
     }
     print(json.dumps(status))
     return 0
 
 
-def manual_update_recipes(
+async def manual_update_recipes(
     cci_path,
     recipes,
     choose_version,
@@ -469,16 +491,17 @@ def manual_update_recipes(
     branch_prefix,
 ):
     ok = True
+    test_lock = asyncio.Lock()
     for recipe_name in recipes:
         try:
             recipe = Recipe(cci_path, recipe_name)
 
             if choose_version:
-                upstream_version = _get_user_choice_upstream_version(recipe)
+                upstream_version = await _get_user_choice_upstream_version(recipe)
             else:
-                upstream_version = _get_most_recent_upstream_version(recipe)
+                upstream_version = await _get_most_recent_upstream_version(recipe)
 
-            update_one_recipe(
+            await update_one_recipe(
                 recipe,
                 upstream_version,
                 folder,
@@ -487,6 +510,7 @@ def manual_update_recipes(
                 force,
                 allow_interaction,
                 branch_prefix,
+                test_lock,
             )
         except (RecipeNotUpdatable, RecipeDeprecated) as exc:
             logger.info("%s: skipped (%s)", recipe, str(exc))
