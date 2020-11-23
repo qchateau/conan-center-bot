@@ -9,3 +9,15 @@ def format_duration(duration):
     if minutes > 0:
         return f"{minutes}m {int(seconds)}s"
     return f"{seconds:.1f}s"
+
+
+def yn_question(question, default):
+    default_txt = "[Y/n]" if default else "[y/N]"
+    while True:
+        txt = input(f"{question} {default_txt} ").strip().lower()
+        if not txt:
+            return default
+        elif txt[0] == "y":
+            return True
+        elif txt[0] == "n":
+            return False

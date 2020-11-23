@@ -8,7 +8,8 @@ import logging
 
 from ccb.recipe import get_recipes_list
 from ccb.status import print_status_table
-from ccb.update import manual_update_recipes, auto_update_all_recipes
+from ccb.update.manual import manual_update_recipes
+from ccb.update.auto import auto_update_all_recipes
 from ccb.github import set_github_token
 from ccb.issue import update_status_issue
 
@@ -44,7 +45,6 @@ def cmd_update(args):
             run_test=not args.no_test,
             push_to=args.push_to,
             force=args.force,
-            allow_interaction=True,
             branch_prefix=args.branch_prefix,
         )
     )
