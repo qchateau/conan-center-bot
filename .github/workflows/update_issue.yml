@@ -50,7 +50,7 @@ jobs:
           conan profile show default
 
       - name: Install CCB
-        run: python3 -m pip install conan-center-bot
+        run: python3 -m pip install .
 
       - name: Clone CCI
         run: |

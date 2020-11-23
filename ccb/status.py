@@ -5,7 +5,6 @@ from terminaltables import AsciiTable
 from colored import fg, stylize
 
 from .recipe import Recipe
-from . import __version__
 
 logger = logging.getLogger(__name__)
 

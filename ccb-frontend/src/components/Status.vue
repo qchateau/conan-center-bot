@@ -8,7 +8,6 @@
         <ul>
           <li>Date: {{ date }}</li>
           <li>Duration: {{ duration }}</li>
-          <li>Version: {{ version }}</li>
           <li>Parsed recipes: {{ recipes.length }}</li>
           <li>Up-to-date recipes: {{ upToDateRecipes.length }}</li>
           <li>Updatable recipes: {{ updatableRecipes.length }}</li>
@@ -71,9 +70,6 @@ export default {
       }
 
       return `${seconds.toFixed(1)}s`
-    },
-    version () {
-      return this.$recipes.status.ccb_version
     }
   }
 }

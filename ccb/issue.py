@@ -4,7 +4,6 @@ import datetime
 import logging
 import aiohttp
 
-from . import __version__
 from .github import get_github_token
 from .utils import format_duration
 
@@ -81,7 +80,6 @@ async def update_status_issue(  # pylint: disable=too-many-locals
             f"* Inconsistent recipes: {len(inconsistent_version)}",
             f"* Unsupported recipes: {len(unsupported)}",
             f"* Duration: {format_duration(update_status['duration'])}",
-            f"* Version: {update_status['ccb_version']}",
             "",
             "Find more details in the [GitHub Pages](https://qchateau.github.io/conan-center-bot/).",
             ""

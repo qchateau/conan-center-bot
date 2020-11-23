@@ -10,7 +10,6 @@ import datetime
 import traceback
 import subprocess
 
-from . import __version__
 from .recipe import Recipe, RecipeError, get_recipes_list
 from .worktree import RecipeInWorktree
 from .yaml import yaml, DoubleQuotes
@@ -481,7 +480,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     status = {
         "date": datetime.datetime.now().isoformat(),
         "duration": duration,
-        "ccb_version": __version__,
+        "version": 1,
         "recipes": [await _generate_recipe_update_status(s) for s in status],
     }
     print(json.dumps(status))
