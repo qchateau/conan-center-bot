@@ -197,7 +197,7 @@ async def add_version(recipe, folder, conan_version, upstream_version):
         yaml.dump(conandata, fil)
 
 
-async def test_recipe(recipe, folder, version_str):
+async def test_recipe(recipe, folder, version_str, test_lock):
     t0 = time.time()
     logger.info("%s: running test", recipe.name)
 
@@ -206,26 +206,32 @@ async def test_recipe(recipe, folder, version_str):
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    proc = await run(
-        ["conan", "create", ".", f"{recipe.name}/{version_str}@"],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        cwd=version_folder_path,
-    )
-    await proc.wait()
+    async def run_as_test(command):
+        proc = await run(
+            command,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=version_folder_path,
+        )
+        await proc.wait()
 
-    if proc.returncode != 0 or logger.isEnabledFor(logging.DEBUG):
-        output = (await proc.stdout.read()).decode()
-    else:
-        output = None
-    logger.debug(output)
-    logger.info("%s: test took %s", recipe.name, format_duration(time.time() - t0))
+        if proc.returncode != 0 or logger.isEnabledFor(logging.DEBUG):
+            output = (await proc.stdout.read()).decode()
+        else:
+            output = None
+        logger.debug(output)
 
-    if proc.returncode != 0:
-        if not logger.isEnabledFor(logging.DEBUG):
-            logger.info(output)
-        raise TestFailed(output)
+        if proc.returncode != 0:
+            if not logger.isEnabledFor(logging.DEBUG):
+                logger.info(output)
+            raise TestFailed(output)
+
+    try:
+        async with test_lock:
+            await run_as_test(["conan", "create", ".", f"{recipe.name}/{version_str}@"])
+    finally:
+        logger.info("%s: test took %s", recipe.name, format_duration(time.time() - t0))
 
 
 async def _get_most_recent_upstream_version(recipe):
@@ -321,8 +327,7 @@ async def update_one_recipe(
         await add_version(new_recipe, folder, conan_version, upstream_version)
 
         if run_test:
-            async with test_lock:
-                await test_recipe(new_recipe, folder, conan_version)
+            await test_recipe(new_recipe, folder, conan_version, test_lock)
 
         await create_branch_and_commit(
             new_recipe,
@@ -419,24 +424,25 @@ async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
     updatable_names = [s.name for s in updatable]
 
     test_lock = asyncio.Lock()
-    update_status = dict(
-        zip(
-            updatable_names,
-            await asyncio.gather(
-                *[
-                    _auto_update_one_recipe(
-                        recipe_name,
-                        cci_path,
-                        branch_prefix,
-                        force,
-                        push_to,
-                        test_lock,
-                    )
-                    for recipe_name in updatable_names
-                ]
-            ),
+    update_tasks = [
+        asyncio.create_task(
+            _auto_update_one_recipe(
+                recipe_name,
+                cci_path,
+                branch_prefix,
+                force,
+                push_to,
+                test_lock,
+            )
         )
-    )
+        for recipe_name in updatable_names
+    ]
+
+    for i, coro in enumerate(asyncio.as_completed(update_tasks)):
+        await coro
+        logger.info("-- %s/%s update done --", i + 1, len(update_tasks))
+
+    update_status = dict(zip(updatable_names, [t.result() for t in update_tasks]))
 
     duration = time.time() - t0
 
