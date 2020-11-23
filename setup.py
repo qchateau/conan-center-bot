@@ -24,7 +24,7 @@ setup(
     install_requires=[
         "terminaltables<4",
         "ruamel.yaml<0.17",
-        "requests<3",
+        "aiohttp<4",
         "colored<2",
         "conan",
     ],

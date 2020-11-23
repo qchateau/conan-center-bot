@@ -3,6 +3,7 @@
 import os
 import sys
 import argparse
+import asyncio
 import logging
 
 from ccb.recipe import get_recipes_list
@@ -24,46 +25,48 @@ def cmd_status(args):
         # The user specified a list, show it all
         args.all = True
 
-    return print_status_table(
-        cci_path=args.cci,
-        recipes=args.recipe,
-        print_all=args.all,
-        jobs=int(args.jobs),
+    return asyncio.run(
+        print_status_table(
+            cci_path=args.cci,
+            recipes=args.recipe,
+            print_all=args.all,
+        )
     )
 
 
 def cmd_update(args):
-    if not args.recipe:
-        args.recipe = get_recipes_list(args.cci)
-
-    return manual_update_recipes(
-        cci_path=args.cci,
-        recipes=args.recipe,
-        choose_version=args.choose_version,
-        folder=args.folder,
-        run_test=not args.no_test,
-        push_to=args.push_to,
-        force=args.force,
-        allow_interaction=True,
-        branch_prefix=args.branch_prefix,
+    return asyncio.run(
+        manual_update_recipes(
+            cci_path=args.cci,
+            recipes=args.recipe,
+            choose_version=args.choose_version,
+            folder=args.folder,
+            run_test=not args.no_test,
+            push_to=args.push_to,
+            force=args.force,
+            allow_interaction=True,
+            branch_prefix=args.branch_prefix,
+        )
     )
 
 
 def cmd_update_status_issue(args):
-    return update_status_issue(
-        update_status_path=args.update_status,
-        issue_url_list=args.issue_url,
-        no_link_pr=args.no_link_pr,
+    return asyncio.run(
+        update_status_issue(
+            update_status_path=args.update_status,
+            issue_url_list=args.issue_url,
+            no_link_pr=args.no_link_pr,
+        )
     )
 
 
 def cmd_auto_update_recipes(args):
-    return auto_update_all_recipes(
-        cci_path=args.cci,
-        force=args.force,
-        push_to=args.push_to,
-        jobs=int(args.jobs),
-        branch_prefix=args.branch_prefix,
+    return asyncio.run(
+        auto_update_all_recipes(
+            cci_path=args.cci,
+            push_to=args.push_to,
+            branch_prefix=args.branch_prefix,
+        )
     )
 
 
@@ -127,12 +130,6 @@ def main():
         nargs="+",
         help="Restrict the recipes status to the ones given as arguments.",
     )
-    parser_status.add_argument(
-        "--jobs",
-        "-j",
-        default=str(10 * os.cpu_count()),
-        help="Number of parallel processes.",
-    )
 
     # Update
     parser_update = add_subparser(
@@ -143,7 +140,7 @@ def main():
     )
     parser_update.add_argument(
         "recipe",
-        nargs="*",
+        nargs="+",
         help="List of recipes to update.",
     )
     parser_update.add_argument(
@@ -183,19 +180,7 @@ def main():
         default="ccb-",
         help="Branch name prefix.",
     )
-    parser_aur.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="Overwrite the branch if it exists, force push if the remote branch exists.",
-    )
     parser_aur.add_argument("--push-to", help="Remote name to push new branches to")
-    parser_aur.add_argument(
-        "--jobs",
-        "-j",
-        default=str(10 * os.cpu_count()),
-        help="Number of parallel processes.",
-    )
 
     # Update status issue
     parser_uis = add_subparser(

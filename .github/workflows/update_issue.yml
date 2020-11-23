@@ -2,7 +2,7 @@ name: update_issue
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 env:
@@ -50,7 +50,7 @@ jobs:
           conan profile show default
 
       - name: Install CCB
-        run: python3 -m pip install conan-center-bot
+        run: python3 -m pip install .
 
       - name: Clone CCI
         run: |
@@ -68,7 +68,6 @@ jobs:
           conan-center-bot auto-update-recipes \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
-            --force \
             --push-to origin \
             > ./status/v1-update.json
           cat ./status/v1-update.json

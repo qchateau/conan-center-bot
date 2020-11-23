@@ -2,9 +2,7 @@ import re
 import abc
 import hashlib
 import logging
-import subprocess
-from functools import lru_cache
-import requests
+import aiohttp
 
 from .version import Version
 from .project_specifics import (
@@ -13,6 +11,7 @@ from .project_specifics import (
     PROJECT_TAGS_WHITELIST,
     PROJECT_TAGS_FIXERS,
 )
+from .subprocess import check_output
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class _Unsupported(RuntimeError):
 
 
 def get_upstream_project(recipe):
-    conanfile_class = recipe.conanfile_class(recipe.most_recent_version)
+    conanfile_class = recipe.conanfile_class(recipe.most_recent_version())
     for cls in _CLASSES:
         try:
             return cls(recipe, conanfile_class)
@@ -38,41 +37,43 @@ class UpstreamProject(abc.ABC):
     def __init__(self, recipe, conanfile_class):
         self.recipe = recipe
         self.conanfile_class = conanfile_class
+        self.__sha256 = {}
 
     @property
     def homepage(self) -> str:
         return self.conanfile_class.homepage
 
-    @abc.abstractproperty
-    def versions(self) -> dict:
+    @abc.abstractmethod
+    async def versions(self) -> dict:
         pass
 
-    @abc.abstractproperty
-    def most_recent_version(self) -> Version:
+    @abc.abstractmethod
+    async def most_recent_version(self) -> Version:
         pass
 
     @abc.abstractmethod
     def source_url(self, version) -> str:
         pass
 
-    @lru_cache(None)
-    def source_sha256_digest(self, version):
-        url = self.source_url(version)
-        if not url:
-            return None
-        sha256 = hashlib.sha256()
-        tarball = requests.get(url)
-        sha256.update(tarball.content)
-        return sha256.hexdigest()
+    async def source_sha256_digest(self, version):
+        if version not in self.__sha256:
+            url = self.source_url(version)
+            if not url:
+                return None
+            sha256 = hashlib.sha256()
+            async with aiohttp.ClientSession(raise_for_status=True) as client:
+                async with client.get(url) as resp:
+                    async for data in resp.content.iter_any():
+                        sha256.update(data)
+            self.__sha256[version] = sha256.hexdigest()
+        return self.__sha256[version]
 
 
 class UnsupportedProject(UpstreamProject):
-    @property
-    def versions(self):  # pylint: disable=invalid-overridden-method
+    async def versions(self):
         return {}
 
-    @property
-    def most_recent_version(self):
+    async def most_recent_version(self):
         return Version()
 
     def source_url(self, version):
@@ -86,31 +87,34 @@ class GitProject(UpstreamProject):
         self.whitelist = PROJECT_TAGS_WHITELIST.get(recipe.name, [])
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
         self.fixer = PROJECT_TAGS_FIXERS.get(recipe.name, None)
+        self.__versions = None
 
-    @property
-    @lru_cache(None)
-    def versions(self):  # pylint: disable=invalid-overridden-method
-        logger.debug("%s: fetching tags...", self.recipe.name)
-        git_output = subprocess.check_output(
-            ["git", "ls-remote", "-t", self.git_url]
-        ).decode()
+    async def versions(self):
+        if self.__versions is None:
+            logger.debug("%s: fetching tags...", self.recipe.name)
+            git_output = (
+                await check_output(["git", "ls-remote", "-t", self.git_url])
+            ).decode()
 
-        tags = [ref.replace("refs/tags/", "") for ref in git_output.split()[1::2]]
-        tags = list(set(tag[:-3] if tag.endswith("^{}") else tag for tag in tags))
-        logger.debug("%s: found tags: %s", self.recipe.name, tags)
+            tags = [ref.replace("refs/tags/", "") for ref in git_output.split()[1::2]]
+            tags = list(set(tag[:-3] if tag.endswith("^{}") else tag for tag in tags))
+            logger.debug("%s: found tags: %s", self.recipe.name, tags)
 
-        valid_tags = self._filter_tags(tags)
-        logger.debug(
-            "%s: ignored %s tags", self.recipe.name, len(tags) - len(valid_tags)
-        )
+            valid_tags = self._filter_tags(tags)
+            logger.debug(
+                "%s: ignored %s tags", self.recipe.name, len(tags) - len(valid_tags)
+            )
 
-        return tuple(Version(version=tag, fixer=self.fixer) for tag in valid_tags)
+            self.__versions = tuple(
+                Version(version=tag, fixer=self.fixer) for tag in valid_tags
+            )
+        return self.__versions
 
-    @property
-    def most_recent_version(self):
-        if not self.versions:
+    async def most_recent_version(self):
+        versions = await self.versions()
+        if not versions:
             return Version()
-        return sorted(self.versions)[-1]
+        return sorted(versions)[-1]
 
     def _filter_tags(self, tags):
         valid_tags = list()
@@ -167,7 +171,7 @@ class GithubProject(GitProject):
             return match.groups()
 
         try:
-            url = recipe.source(recipe.most_recent_version)["url"]
+            url = recipe.source(recipe.most_recent_version())["url"]
             match = cls.SOURCE_URL_RE.match(url)
             if match:
                 return match.groups()

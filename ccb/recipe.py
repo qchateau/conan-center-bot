@@ -54,8 +54,8 @@ class Status(typing.NamedTuple):
             and self.upstream_version.is_date != self.recipe_version.is_date
         )
 
-    def prs_opened(self):
-        return cci_interface.pull_request_for(self)
+    async def prs_opened(self):
+        return await cci_interface.pull_request_for(self)
 
 
 class Recipe:
@@ -76,13 +76,11 @@ class Recipe:
     def upstream(self):
         return get_upstream_project(self)
 
-    @property
     def versions(self):
         return [Version(v) for v in self.config()["versions"].keys()]
 
-    @property
     def most_recent_version(self):
-        return sorted(self.versions)[-1]
+        return sorted(self.versions())[-1]
 
     def folder(self, version):
         assert isinstance(version, Version)
@@ -99,11 +97,11 @@ class Recipe:
                 return v
         raise KeyError(version)
 
-    def status(self, recipe_version=None, upstream_version=None):
+    async def status(self, recipe_version=None, upstream_version=None):
         try:
-            recipe_version = recipe_version or self.most_recent_version
+            recipe_version = recipe_version or self.most_recent_version()
             recipe_upstream_version = (
-                upstream_version or self.upstream.most_recent_version
+                upstream_version or await self.upstream.most_recent_version()
             )
             homepage = self.upstream.homepage
             deprecated = bool(
