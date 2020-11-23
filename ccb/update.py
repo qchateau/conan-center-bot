@@ -23,16 +23,15 @@ from .subprocess import run, call, check_call
 
 logger = logging.getLogger(__name__)
 
+RE_TEST_ERRORS = [
+    re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
+    re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
+    re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
+    re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
+]
+
 
 class UpdateError(RuntimeError):
-    pass
-
-
-class RecipeNotSupported(UpdateError):
-    pass
-
-
-class RecipeDeprecated(RecipeNotSupported):
     pass
 
 
@@ -44,40 +43,19 @@ class RecipeNotUpdatable(UpdateError):
     pass
 
 
-class TestFailed(UpdateError):
-    RE_ERRORS = [
-        re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
-        re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
-        re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
-        re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
-    ]
-
-    def __init__(self, output):
-        super().__init__("Test failed")
-        self.output = output
-
-    def details(self):
-        for regex in self.RE_ERRORS:
-            errors = [match.group(1) for match in regex.finditer(self.output)]
-            if errors:
-                return "\n".join(errors)
-        return "no details"
-
-
-class BranchAlreadyExists(UpdateError):
-    def __init__(self, branch_name, remote=None):
-        super().__init__(
-            f"branch already exists: {remote+'/' if remote else ''}{branch_name}"
-        )
-        self.branch_name = branch_name
-        self.remote = remote
+class TestStatus(typing.NamedTuple):
+    success: bool
+    duration: float
+    error: typing.Optional[str] = None
 
 
 class UpdateStatus(typing.NamedTuple):
+    updated: bool
+    test_status: typing.Optional[TestStatus] = None
     branch_name: typing.Optional[str] = None
     branch_remote_owner: typing.Optional[str] = None
     branch_remote_repo: typing.Optional[str] = None
-    error: typing.Optional[str] = None
+    details: typing.Optional[str] = None
 
 
 def yn_question(question, default):
@@ -90,6 +68,14 @@ def yn_question(question, default):
             return True
         elif txt[0] == "n":
             return False
+
+
+def get_test_details(output):
+    for regex in RE_TEST_ERRORS:
+        errors = [match.group(1) for match in regex.finditer(output)]
+        if errors:
+            return "\n".join(errors)
+    return "no details"
 
 
 async def branch_exists(recipe, branch_name):
@@ -228,7 +214,7 @@ async def test_recipe(recipe, folder, version_str, test_lock):
             recipe.name,
             format_duration(duration),
         )
-        return
+        return TestStatus(success=True, duration=duration)
 
     output = output.decode()
     logger.info(output)
@@ -237,7 +223,7 @@ async def test_recipe(recipe, folder, version_str, test_lock):
         recipe.name,
         format_duration(duration),
     )
-    raise TestFailed(output)
+    return TestStatus(success=False, error=get_test_details(output), duration=duration)
 
 
 async def _get_most_recent_upstream_version(recipe):
@@ -290,15 +276,20 @@ async def update_one_recipe(
     allow_interaction,
     branch_prefix,
     test_lock,
-):
+) -> UpdateStatus:
     assert isinstance(recipe, Recipe)
-
-    if getattr(recipe.conanfile_class, "deprecated", False):
-        raise RecipeDeprecated("recipe is deprecated")
 
     conan_version = upstream_version.fixed
     branch_name = f"{branch_prefix}{recipe.name}-{conan_version}"
     force_push = force
+
+    if push_to:
+        logger.info("%s: pushing", recipe.name)
+        branch_remote_owner, branch_remote_repo = await cci_interface.owner_and_repo(
+            recipe.path, push_to
+        )
+    else:
+        branch_remote_owner = branch_remote_repo = None
 
     if await branch_exists(recipe, branch_name):
         if allow_interaction and not force:
@@ -306,7 +297,11 @@ async def update_one_recipe(
                 f"Branch '{branch_name}' already exists, overwrite ?", False
             )
         if not force:
-            raise BranchAlreadyExists(branch_name)
+            return UpdateStatus(
+                updated=False,
+                branch_name=branch_name,
+                details="branch already exists",
+            )
         await remove_branch(recipe, branch_name)
 
     if await remote_branch_exists(recipe, branch_name, push_to):
@@ -316,7 +311,13 @@ async def update_one_recipe(
                 False,
             )
         if not force_push:
-            raise BranchAlreadyExists(branch_name, push_to)
+            return UpdateStatus(
+                updated=False,
+                branch_name=branch_name,
+                branch_remote_owner=branch_remote_owner,
+                branch_remote_repo=branch_remote_repo,
+                details="remote branch already exists",
+            )
 
     folder = folder or recipe.folder(recipe.most_recent_version())
 
@@ -333,36 +334,51 @@ async def update_one_recipe(
         await add_version(new_recipe, folder, conan_version, upstream_version)
 
         if run_test:
-            await test_recipe(new_recipe, folder, conan_version, test_lock)
+            test_status = await test_recipe(
+                new_recipe, folder, conan_version, test_lock
+            )
+        else:
+            test_status = None
 
-        await create_branch_and_commit(
-            new_recipe,
-            branch_name,
-            f"{recipe.name}: add version {conan_version}\n\n"
-            "Generated and committed by [Conan Center Bot](https://github.com/qchateau/conan-center-bot)\n"
-            "Find more updatable recipes in the [GitHub Pages](https://qchateau.github.io/conan-center-bot/)",
-        )
+        if test_status is None or test_status.success:
+            await create_branch_and_commit(
+                new_recipe,
+                branch_name,
+                f"{recipe.name}: add version {conan_version}\n\n"
+                "Generated and committed by [Conan Center Bot](https://github.com/qchateau/conan-center-bot)\n"
+                "Find more updatable recipes in the [GitHub Pages](https://qchateau.github.io/conan-center-bot/)",
+            )
 
-        if push_to:
-            logger.info("%s: pushing", recipe.name)
-            await push_branch(new_recipe, push_to, branch_name, force_push)
+            if push_to:
+                logger.info("%s: pushing", recipe.name)
+                await push_branch(new_recipe, push_to, branch_name, force_push)
 
-    logger.info(
-        "%s: created version %s in branch %s (%s)",
-        recipe.name,
-        conan_version,
-        branch_name,
-        "pushed" if push_to else "not pushed",
+            logger.info(
+                "%s: created version %s in branch %s (%s)",
+                recipe.name,
+                conan_version,
+                branch_name,
+                "pushed" if push_to else "not pushed",
+            )
+        else:
+            # test failed, we did not push, remote branches
+            # either do not exist or are out of date
+            branch_remote_owner = branch_remote_repo = None
+
+    return UpdateStatus(
+        updated=True,
+        test_status=test_status,
+        branch_name=branch_name,
+        branch_remote_owner=branch_remote_owner,
+        branch_remote_repo=branch_remote_repo,
+        details=test_status.error if test_status else None,
     )
-
-    return branch_name
 
 
 async def _auto_update_one_recipe(
     recipe_name,
     cci_path,
     branch_prefix,
-    force,
     push_to,
     test_lock,
 ):
@@ -371,49 +387,30 @@ async def _auto_update_one_recipe(
 
     if await recipe_status.prs_opened():
         logger.info("%s: skipped (PR exists)", recipe.name)
-        return UpdateStatus(None, None, None, None)
+        return UpdateStatus(updated=False, details="PR exists")
 
-    error = branch_name = branch_remote_owner = branch_remote_repo = None
     try:
-        branch_name = await update_one_recipe(
+        return await update_one_recipe(
             recipe=recipe,
             upstream_version=recipe_status.upstream_version,
             folder=None,
             run_test=True,
             push_to=push_to,
-            force=force,
+            force=True,
             allow_interaction=False,
             branch_prefix=branch_prefix,
             test_lock=test_lock,
         )
-        if push_to:
-            (
-                branch_remote_owner,
-                branch_remote_repo,
-            ) = await cci_interface.owner_and_repo(
-                cci_path,
-                push_to,
-            )
-    except BranchAlreadyExists as exc:
-        logger.info("%s: skipped (%s)", recipe.name, str(exc))
-        branch_name = exc.branch_name
-        if exc.remote:
-            (
-                branch_remote_owner,
-                branch_remote_repo,
-            ) = await cci_interface.owner_and_repo(
-                cci_path,
-                exc.remote,
-            )
-    except TestFailed as exc:
-        error = exc.details()
-    except Exception as exc:
-        logger.error("%s: %s", recipe.name, str(exc))
-        error = traceback.format_exc()
-    return UpdateStatus(branch_name, branch_remote_owner, branch_remote_repo, error)
+    except Exception:
+        logger.error(
+            "%s: exception during update:\n%s",
+            recipe.name,
+            traceback.format_exc(),
+        )
+        return UpdateStatus(updated=False, details=traceback.format_exc())
 
 
-async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
+async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     t0 = time.time()
     recipes = get_recipes_list(cci_path)
 
@@ -435,7 +432,6 @@ async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
                 recipe_name,
                 cci_path,
                 branch_prefix,
-                force,
                 push_to,
                 test_lock,
             )
@@ -452,7 +448,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
     duration = time.time() - t0
 
     async def _generate_recipe_update_status(status):
-        update = update_status.get(status.name, UpdateStatus())
+        update = update_status.get(status.name, UpdateStatus(updated=False))
         return {
             "name": status.name,
             "homepage": status.homepage,
@@ -478,7 +474,8 @@ async def auto_update_all_recipes(cci_path, branch_prefix, force, push_to):
                 "repo": update.branch_remote_repo,
                 "branch": update.branch_name,
             },
-            "update_error": update.error,
+            "update_error": update.details,
+            "test_error": update.test_status.error if update.test_status else None,
         }
 
     status = {
@@ -513,7 +510,7 @@ async def manual_update_recipes(
             else:
                 upstream_version = await _get_most_recent_upstream_version(recipe)
 
-            await update_one_recipe(
+            status = await update_one_recipe(
                 recipe,
                 upstream_version,
                 folder,
@@ -524,12 +521,12 @@ async def manual_update_recipes(
                 branch_prefix,
                 test_lock,
             )
-        except (RecipeNotUpdatable, RecipeDeprecated) as exc:
-            logger.info("%s: skipped (%s)", recipe, str(exc))
-        except TestFailed as exc:
-            logger.error("%s: Test failed:\n%s", recipe, exc.details())
+            if not status.updated:
+                logger.info("%s: skipped (%s)", recipe_name, status.details)
+            elif status.test_ran and not status.test_success:
+                logger.error("%s: test failed:\n%s", recipe_name, status.details)
         except (UpdateError, RecipeError) as exc:
-            logger.error("%s: %s", recipe, str(exc))
+            logger.error("%s: %s", recipe_name, str(exc))
             ok = False
 
     return 0 if ok else 1

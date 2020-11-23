@@ -35,9 +35,6 @@ def cmd_status(args):
 
 
 def cmd_update(args):
-    if not args.recipe:
-        args.recipe = get_recipes_list(args.cci)
-
     return asyncio.run(
         manual_update_recipes(
             cci_path=args.cci,
@@ -67,7 +64,6 @@ def cmd_auto_update_recipes(args):
     return asyncio.run(
         auto_update_all_recipes(
             cci_path=args.cci,
-            force=args.force,
             push_to=args.push_to,
             branch_prefix=args.branch_prefix,
         )
@@ -144,7 +140,7 @@ def main():
     )
     parser_update.add_argument(
         "recipe",
-        nargs="*",
+        nargs="+",
         help="List of recipes to update.",
     )
     parser_update.add_argument(
@@ -183,12 +179,6 @@ def main():
         "--branch-prefix",
         default="ccb-",
         help="Branch name prefix.",
-    )
-    parser_aur.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="Overwrite the branch if it exists, force push if the remote branch exists.",
     )
     parser_aur.add_argument("--push-to", help="Remote name to push new branches to")
 

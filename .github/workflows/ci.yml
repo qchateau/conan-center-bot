@@ -106,7 +106,6 @@ jobs:
           conan-center-bot auto-update-recipes \
             --cci conan-center-index \
             --github-token "$GITHUB_TOKEN" \
-            --force \
             --push-to origin \
             > ./status/v1-update.json
           cat ./status/v1-update.json
