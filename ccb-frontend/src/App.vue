@@ -2,11 +2,7 @@
   <v-app id="inspire">
     <v-app-bar app flat>
       <v-tabs centered class="ml-n9" color="grey darken-1">
-        <v-tab
-          v-for="route in visibleRoutes"
-          :key="route.path"
-          @click="$router.push(route.path)"
-        >{{ route.name }}</v-tab>
+        <v-tab v-for="route in visibleRoutes" :key="route.path" :to="route.path">{{ route.name }}</v-tab>
       </v-tabs>
     </v-app-bar>
 
