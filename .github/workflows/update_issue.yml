@@ -1,6 +1,9 @@
 name: update_issue
 
 on:
+  push:
+    branches:
+      - master
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
