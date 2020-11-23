@@ -52,7 +52,10 @@ jobs:
           conan profile update settings.compiler.libcxx=libstdc++11 default
           conan profile show default
 
-      - name: Install CCB
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install CCB locally
         run: python3 -m pip install .
 
       - name: Clone CCI
