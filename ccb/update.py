@@ -198,40 +198,46 @@ async def add_version(recipe, folder, conan_version, upstream_version):
 
 
 async def test_recipe(recipe, folder, version_str, test_lock):
-    t0 = time.time()
-    logger.info("%s: running test", recipe.name)
-
     version_folder_path = os.path.join(recipe.path, folder)
 
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    async def run_as_test(command):
-        proc = await run(
-            command,
+    async with test_lock:
+        t0 = time.time()
+        logger.info("%s: running test", recipe.name)
+        process = await run(
+            [
+                "conan",
+                "create",
+                ".",
+                f"{recipe.name}/{version_str}@",
+            ],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=version_folder_path,
         )
-        await proc.wait()
+        output, _ = await process.communicate()
+        code = await process.wait()
+        duration = time.time() - t0
 
-        if proc.returncode != 0 or logger.isEnabledFor(logging.DEBUG):
-            output = (await proc.stdout.read()).decode()
-        else:
-            output = None
-        logger.debug(output)
+    if code == 0:
+        logger.info(
+            "%s: test passed in %s",
+            recipe.name,
+            format_duration(duration),
+        )
+        return
 
-        if proc.returncode != 0:
-            if not logger.isEnabledFor(logging.DEBUG):
-                logger.info(output)
-            raise TestFailed(output)
-
-    try:
-        async with test_lock:
-            await run_as_test(["conan", "create", ".", f"{recipe.name}/{version_str}@"])
-    finally:
-        logger.info("%s: test took %s", recipe.name, format_duration(time.time() - t0))
+    output = output.decode()
+    logger.info(output)
+    logger.error(
+        "%s: test failed in %s",
+        recipe.name,
+        format_duration(duration),
+    )
+    raise TestFailed(output)
 
 
 async def _get_most_recent_upstream_version(recipe):
@@ -400,7 +406,6 @@ async def _auto_update_one_recipe(
                 exc.remote,
             )
     except TestFailed as exc:
-        logger.error("%s: test failed", recipe.name)
         error = exc.details()
     except Exception as exc:
         logger.error("%s: %s", recipe.name, str(exc))
