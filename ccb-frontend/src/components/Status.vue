@@ -11,6 +11,11 @@
           <li>Parsed recipes: {{ recipes.length }}</li>
           <li>Up-to-date recipes: {{ upToDateRecipes.length }}</li>
           <li>Updatable recipes: {{ updatableRecipes.length }}</li>
+          <ul>
+            <li>Auto-updatable recipes: {{ autoUpdatableRecipes.length }}</li>
+            <li>Recipes with a PR already opened: {{ recipesWithPrOpened.length }}</li>
+            <li>Recipes with error: {{ updatableRecipesWithError.length }}</li>
+          </ul>
           <li>Inconsistent recipes: {{ inconsistentRecipes.length }}</li>
           <li>Unsupported recipes: {{ unsupportedRecipes.length }}</li>
         </ul>
@@ -48,6 +53,19 @@ export default {
     },
     updatableRecipes () {
       return this.recipes.filter(x => x.updatable)
+    },
+    autoUpdatableRecipes () {
+      return this.updatableRecipes.filter(x =>
+        x.updated_branch.owner &&
+        x.updated_branch.repo &&
+        x.updated_branch.branch
+      )
+    },
+    recipesWithPrOpened () {
+      return this.updatableRecipes.filter(x => x.prs_opened.length > 0)
+    },
+    updatableRecipesWithError () {
+      return this.updatableRecipes.filter(x => x.test_error)
     },
     inconsistentRecipes () {
       return this.recipes.filter(x => x.inconsistent_versioning)
