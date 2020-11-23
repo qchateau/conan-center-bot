@@ -2,7 +2,9 @@ from asyncio.subprocess import create_subprocess_exec, PIPE
 
 
 class SubprocessError(RuntimeError):
-    pass
+    def __init__(self, process):
+        super().__init__("subprocess error")
+        self.process = process
 
 
 async def run(cmd, **kwargs):
@@ -15,14 +17,15 @@ async def call(cmd, **kwargs):
 
 
 async def check_call(cmd, **kwargs):
-    code = await call(cmd=cmd, **kwargs)
+    process = await run(cmd=cmd, **kwargs)
+    code = await process.wait()
     if code != 0:
-        raise SubprocessError()
+        raise SubprocessError(process)
 
 
 async def check_output(cmd, **kwargs):
     process = await run(cmd=cmd, stdout=PIPE, **kwargs)
     code = await process.wait()
     if code != 0:
-        raise SubprocessError()
+        raise SubprocessError(process)
     return await process.stdout.read()
