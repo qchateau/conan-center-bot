@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def get_version():
@@ -14,7 +14,7 @@ setup(
     name="conan-center-bot",
     version=get_version(),
     license="GPLv3",
-    packages=["ccb"],
+    packages=find_packages(),
     entry_points={
         "console_scripts": [
             "conan-center-bot=ccb.__main__:main",
