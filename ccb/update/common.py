@@ -28,6 +28,10 @@ RE_TEST_ERRORS = [
     re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
 ]
 
+RE_CMAKELISTS_VERSION = re.compile(
+    r"(cmake_minimum_required\s*\(\s*VERSION\s*)([0-9\.]+)(\s*\))", re.I
+)
+
 
 class TestStatus(typing.NamedTuple):
     success: bool
@@ -50,6 +54,31 @@ def get_test_details(output):
         if errors:
             return "\n".join(errors)
     return "no details"
+
+
+async def patch_cmakelists_version(recipe, folder):
+    cmakelists_path = recipe.cmakelists_path(folder)
+    if not os.path.exists(cmakelists_path):
+        logger.warning("%s: CMakeLists.txt not found", recipe.name)
+        return
+
+    with open(cmakelists_path) as f:
+        content = f.read()
+
+    match = RE_CMAKELISTS_VERSION.search(content)
+    if not match:
+        logger.warning("%s: CMake minimum version not found", recipe.name)
+        return
+
+    version = Version(match.group(2))
+    if version >= Version("3.1"):
+        return
+
+    logger.info("%s: updating CMake minimum version", recipe.name)
+    content = RE_CMAKELISTS_VERSION.sub(r"\g<1>3.1\g<3>", content)
+
+    with open(cmakelists_path, "w") as f:
+        f.write(content)
 
 
 async def add_version(recipe, folder, conan_version, upstream_version):
@@ -169,6 +198,7 @@ async def update_one_recipe(
     )
 
     async with RecipeInWorktree(recipe) as new_recipe:
+        await patch_cmakelists_version(new_recipe, folder)
         await add_version(new_recipe, folder, conan_version, upstream_version)
 
         test_status = None

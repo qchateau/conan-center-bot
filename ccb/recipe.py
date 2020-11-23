@@ -90,6 +90,13 @@ class Recipe:
                 return v["folder"]
         raise KeyError(version)
 
+    def cmakelists_path(self, version_or_folder):
+        if isinstance(version_or_folder, Version):
+            folder = self.folder(version_or_folder)
+        else:
+            folder = version_or_folder
+        return os.path.join(self.path, folder, "test_package", "CMakeLists.txt")
+
     def source(self, version):
         conandata = self.conandata(version)
         for k, v in conandata["sources"].items():
