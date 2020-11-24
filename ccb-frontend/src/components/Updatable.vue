@@ -90,6 +90,9 @@ export default {
     }
   },
   methods: {
+    canOpenPr (recipe) {
+      return recipe.updated_branch.owner && recipe.updated_branch.repo && recipe.updated_branch.branch
+    },
     prLinks (recipe) {
       if (recipe.prs_opened.length > 0) {
         return recipe.prs_opened.map(pr => ({
@@ -98,11 +101,11 @@ export default {
         }))
       }
 
-      const branch = recipe.updated_branch
-      if (!(branch.owner && branch.repo && branch.branch)) {
+      if (!this.canOpenPr(recipe)) {
         return [{text: 'No'}]
       }
 
+      const branch = recipe.updated_branch
       return [{text: 'Open one', href: `https://github.com/${branch.owner}/${branch.repo}/pull/new/${branch.branch}`}]
     }
   },
