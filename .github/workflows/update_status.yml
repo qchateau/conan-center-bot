@@ -1,4 +1,4 @@
-name: update_issue
+name: update_status
 
 on:
   push:
@@ -14,7 +14,7 @@ env:
   PYTHONUNBUFFERED: 1
 
 jobs:
-  update_issue:
+  update_status:
     runs-on: ubuntu-20.04
     steps:
       - name: Setup python
