@@ -1,3 +1,6 @@
+import asyncio
+
+
 def format_duration(duration):
     hours = int(duration // 3600)
     duration -= hours * 3600
@@ -21,3 +24,14 @@ def yn_question(question, default):
             return True
         elif txt[0] == "n":
             return False
+
+
+class LockStorage:
+    def __init__(self):
+        self.data = dict()
+
+    def get(self, loop=asyncio.get_event_loop()):
+        if loop not in self.data:
+            self.data[loop] = asyncio.Lock()
+        return self.data[loop]
+

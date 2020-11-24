@@ -20,7 +20,6 @@ async def auto_update_one_recipe(
     cci_path,
     branch_prefix,
     push_to,
-    test_lock,
 ):
     recipe = Recipe(cci_path, recipe_name)
     recipe_status = await recipe.status()
@@ -40,7 +39,6 @@ async def auto_update_one_recipe(
             push_to=push_to,
             force_push=True,
             branch_name=branch_name,
-            test_lock=test_lock,
         )
     except Exception:
         logger.error(
@@ -66,7 +64,6 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     updatable = [s for s in status if s.update_possible()]
     updatable_names = [s.name for s in updatable]
 
-    test_lock = asyncio.Lock()
     update_tasks = [
         asyncio.create_task(
             auto_update_one_recipe(
@@ -74,7 +71,6 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
                 cci_path,
                 branch_prefix,
                 push_to,
-                test_lock,
             )
         )
         for recipe_name in updatable_names

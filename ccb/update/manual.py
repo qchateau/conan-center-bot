@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from ..recipe import Recipe, RecipeError
@@ -75,7 +74,6 @@ async def manual_update_one_recipe(
     push_to,
     force,
     branch_prefix,
-    test_lock,
 ):
     recipe = Recipe(cci_path, recipe_name)
 
@@ -113,7 +111,6 @@ async def manual_update_one_recipe(
         push_to=push_to,
         force_push=force_push,
         branch_name=branch_name,
-        test_lock=test_lock,
     )
 
     if not status.updated:
@@ -133,7 +130,6 @@ async def manual_update_recipes(
     branch_prefix,
 ):
     ok = True
-    test_lock = asyncio.Lock()
     for recipe_name in recipes:
         try:
             await manual_update_one_recipe(
@@ -145,7 +141,6 @@ async def manual_update_recipes(
                 push_to=push_to,
                 force=force,
                 branch_prefix=branch_prefix,
-                test_lock=test_lock,
             )
         except (UpdateError, RecipeError) as exc:
             logger.error("%s: %s", recipe_name, str(exc))

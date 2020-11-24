@@ -10,7 +10,7 @@ from ..recipe import Recipe
 from ..yaml import yaml, DoubleQuotes
 from ..version import Version
 from ..cci import cci_interface
-from ..utils import format_duration
+from ..utils import format_duration, LockStorage
 from ..subprocess import run
 from ..git import (
     RecipeInWorktree,
@@ -20,6 +20,7 @@ from ..git import (
 
 
 logger = logging.getLogger(__name__)
+test_lock = LockStorage()
 
 RE_TEST_ERRORS = [
     re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
@@ -130,13 +131,13 @@ async def add_version(recipe, folder, conan_version, upstream_version):
         yaml.dump(conandata, fil)
 
 
-async def test_recipe(recipe, folder, version_str, test_lock):
+async def test_recipe(recipe, folder, version_str):
     version_folder_path = os.path.join(recipe.path, folder)
 
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    async with test_lock:
+    async with test_lock.get():
         t0 = time.time()
         logger.info("%s: running test", recipe.name)
         process = await run(
@@ -155,22 +156,24 @@ async def test_recipe(recipe, folder, version_str, test_lock):
         code = await process.wait()
         duration = time.time() - t0
 
-    if code == 0:
-        logger.info(
-            "%s: test passed in %s",
-            recipe.name,
-            format_duration(duration),
-        )
-        return TestStatus(success=True, duration=duration)
+        if code != 0:
+            output = output.decode()
+            logger.info(output)
+            logger.error(
+                "%s: test failed in %s",
+                recipe.name,
+                format_duration(duration),
+            )
+            return TestStatus(
+                success=False, duration=duration, error=get_test_details(output)
+            )
 
-    output = output.decode()
-    logger.info(output)
-    logger.error(
-        "%s: test failed in %s",
+    logger.info(
+        "%s: test passed in %s",
         recipe.name,
         format_duration(duration),
     )
-    return TestStatus(success=False, error=get_test_details(output), duration=duration)
+    return TestStatus(success=True, duration=duration)
 
 
 async def update_one_recipe(
@@ -181,7 +184,6 @@ async def update_one_recipe(
     push_to,
     force_push,
     branch_name,
-    test_lock,
 ) -> UpdateStatus:
     assert isinstance(recipe, Recipe)
 
@@ -203,9 +205,7 @@ async def update_one_recipe(
 
         test_status = None
         if run_test:
-            test_status = await test_recipe(
-                new_recipe, folder, conan_version, test_lock
-            )
+            test_status = await test_recipe(new_recipe, folder, conan_version)
 
             if not test_status.success:
                 return UpdateStatus(
