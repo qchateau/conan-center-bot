@@ -68,12 +68,19 @@ async def update_status_issue(  # pylint: disable=too-many-locals
     updatable = [r for r in recipes if r["updatable"]]
     inconsistent_version = [r for r in recipes if r["inconsistent_versioning"]]
     unsupported = [r for r in recipes if not r["supported"]]
+    run_id = update_status["github_action_run_id"]
+    gha_run_id_text = (
+        f"[{run_id}](https://github.com/qchateau/conan-center-bot/actions/runs/{run_id}"
+        if run_id
+        else "unknown"
+    )
 
     text = "\n".join(
         [
             "# Conan Center Bot",
             "",
             f"* Date: {date}",
+            f"* GitHub Action run: {gha_run_id_text}",
             f"* Parsed recipes: {len(recipes)}",
             f"* Up-to-date recipes: {len(up_to_date)}",
             f"* Updatable recipes: {len(updatable)}",
@@ -145,11 +152,11 @@ async def update_status_issue(  # pylint: disable=too-many-locals
             + f"<a href=\"{r['homepage']}\">{r['name']}</a>"
             + "</td>"
             + "<td>"
-            + f"{str_to_pre(r['update_error'])}"
+            + f"{str_to_pre(r['test_error'])}"
             + "</td>"
             + "</tr>"
             for r in updatable
-            if r["update_error"] is not None
+            if r["test_error"] is not None
         ]
     )
 

@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import asyncio
@@ -123,6 +124,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
         "duration": duration,
         "version": 1,
         "recipes": [await _generate_recipe_update_status(s) for s in status],
+        "github_action_run_id": os.environ.get("GITHUB_RUN_ID", None),
     }
     print(json.dumps(status))
     return 0

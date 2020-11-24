@@ -1,4 +1,4 @@
-name: update_issue
+name: update_status
 
 on:
   push:
@@ -10,10 +10,11 @@ on:
 
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
+  CONAN_SYSREQUIRES_MODE: enabled
   PYTHONUNBUFFERED: 1
 
 jobs:
-  update_issue:
+  update_status:
     runs-on: ubuntu-20.04
     steps:
       - name: Setup python
@@ -85,6 +86,11 @@ jobs:
             ./status/v1-update.json \
             https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
+
+      # Sleep to avoid deploying in both workflow at the same time
+      - name: Delay before deploy
+        if: github.event_name == 'push'
+        run: sleep 300
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@3.7.1

@@ -7,6 +7,10 @@
       <v-card-text>
         <ul>
           <li>Date: {{ date }}</li>
+          <li v-if="githubActionUrl">
+            GitHub Action run:
+            <a :href="githubActionUrl">{{ githubActionRunId }}</a>
+          </li>
           <li>Duration: {{ duration }}</li>
           <li>Parsed recipes: {{ recipes.length }}</li>
           <li>Up-to-date recipes: {{ upToDateRecipes.length }}</li>
@@ -44,6 +48,15 @@ export default {
     date () {
       let date = new Date(this.$recipes.status.date)
       return date.toLocaleString('en-GB', {timeZoneName: 'short'})
+    },
+    githubActionRunId () {
+      return this.$recipes.status.github_action_run_id
+    },
+    githubActionUrl () {
+      if (!this.githubActionRunId) {
+        return null
+      }
+      return 'https://github.com/qchateau/conan-center-bot/actions/runs/' + this.githubActionRunId
     },
     recipes () {
       return this.$recipes.status.recipes

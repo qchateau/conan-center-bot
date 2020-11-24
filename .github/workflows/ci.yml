@@ -4,6 +4,7 @@ on: push
 
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
+  CONAN_SYSREQUIRES_MODE: enabled
   PYTHONUNBUFFERED: 1
 
 jobs:
