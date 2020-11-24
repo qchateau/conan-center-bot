@@ -70,7 +70,7 @@ async def update_status_issue(  # pylint: disable=too-many-locals
     unsupported = [r for r in recipes if not r["supported"]]
     run_id = update_status["github_action_run_id"]
     gha_run_id_text = (
-        f"[{run_id}](https://github.com/qchateau/conan-center-bot/actions/runs/{run_id}"
+        f"[{run_id}](https://github.com/qchateau/conan-center-bot/actions/runs/{run_id})"
         if run_id
         else "unknown"
     )
