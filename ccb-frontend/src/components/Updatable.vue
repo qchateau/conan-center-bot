@@ -120,9 +120,7 @@ export default {
 pre {
   overflow-x: auto;
   white-space: pre-wrap;
-  white-space: -moz-pre-wrap;
-  white-space: -pre-wrap;
-  white-space: -o-pre-wrap;
   word-wrap: break-word;
+  font-size: 0.9em;
 }
 </style>
