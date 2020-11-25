@@ -25,8 +25,6 @@ PROJECT_TAGS_BLACKLIST = {
     "libusb": [re.compile(r"^r[0-9]{3}$")] + TAGS_BLACKLIST,
     "c-ares": [re.compile(r"^curl-(.*)")] + TAGS_BLACKLIST,
     "libtorrent": [re.compile(r"^rc(.*)", re.I)] + TAGS_BLACKLIST,
-    "mbedtls": [re.compile(r"mbedos-(.*)"), re.compile(r"(.*)p[0-9]+$")]
-    + TAGS_BLACKLIST,
     "qhull": [re.compile(r"[0-9]{4}\.[0-9]{1,2}")] + TAGS_BLACKLIST,
     "opencv": [re.compile(r"-openvino")] + TAGS_BLACKLIST,
 }
@@ -43,6 +41,7 @@ PROJECT_TAGS_WHITELIST = {
     "makefile-project-workspace-creator": [re.compile(r"^MPC_([0-9]+(_[0-9]+)+)")],
     "openimageio": [re.compile(r"^Release-([0-9]+(\.[0-9]+)+)$")],
     "thrust": [re.compile(r"^[0-9]+([\.-][0-9]+)+$")],
+    "mbedtls": [re.compile(r"^mbedtls-([0-9]+(\.[0-9]+)+)$")],
 }
 
 # Project-based tag fixer, must convert the tag to a "x.y.z" version
