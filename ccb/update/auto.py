@@ -114,9 +114,16 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
 
     logger.info("parsing upstreams for %s recipes", len(recipes))
     recipes = [recipe.for_version(recipe.most_recent_version()) for recipe in recipes]
-    new_upstream_versions = await asyncio.gather(
-        *[recipe.upstream().most_recent_version() for recipe in recipes]
-    )
+    parsing_tasks = [
+        asyncio.create_task(recipe.upstream().most_recent_version())
+        for recipe in recipes
+    ]
+
+    for i, coro in enumerate(asyncio.as_completed(parsing_tasks)):
+        await coro
+        logger.info("-- %s/%s parsing done --", i + 1, len(parsing_tasks))
+
+    new_upstream_versions = [t.result() for t in parsing_tasks]
     logger.info(
         "parsed %s upstreams in %s", len(recipes), format_duration(time.time() - t0)
     )

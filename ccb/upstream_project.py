@@ -1,5 +1,6 @@
 import re
 import abc
+import time
 import typing
 import datetime
 import tempfile
@@ -15,7 +16,7 @@ from .project_specifics import (
     PROJECT_TAGS_FIXERS,
 )
 from .subprocess import check_output, check_call
-from .utils import SemaphoneStorage
+from .utils import SemaphoneStorage, format_duration
 
 
 logger = logging.getLogger(__name__)
@@ -112,11 +113,18 @@ class GitProject(UpstreamProject):
 
     async def _clone_and_parse_git_repo(self):
         async with clone_sem.get():
+            t0 = time.time()
             with tempfile.TemporaryDirectory() as tmp:
-                logger.debug("%s: cloning repository", self.recipe.name)
+                logger.info("%s: cloning repository", self.recipe.name)
                 await check_call(["git", "clone", "-q", "-n", self.git_url, tmp])
-                logger.debug("%s: parsing repository", self.recipe.name)
+                logger.info("%s: parsing repository", self.recipe.name)
                 await self._parse_git_repo(tmp)
+            duration = time.time() - t0
+            logger.info(
+                "%s: parsed repository in %s",
+                self.recipe.name,
+                format_duration(duration),
+            )
 
     async def _parse_git_repo(self, git_dir):
         tags_data = await self._parse_tags(git_dir)
