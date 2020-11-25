@@ -220,10 +220,6 @@ class GithubProject(GitProject):
 
     @classmethod
     def _get_owner_repo(cls, recipe):
-        match = cls.HOMEPAGE_RE.match(recipe.homepage or "")
-        if match:
-            return match.groups()
-
         try:
             url = recipe.source()["url"]
             match = cls.SOURCE_URL_RE.match(url)
