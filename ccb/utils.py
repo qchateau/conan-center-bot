@@ -35,3 +35,13 @@ class LockStorage:
             self.data[loop] = asyncio.Lock()
         return self.data[loop]
 
+
+class SemaphoneStorage:
+    def __init__(self, initial_count):
+        self.initial_count = initial_count
+        self.data = dict()
+
+    def get(self, loop=asyncio.get_event_loop()):
+        if loop not in self.data:
+            self.data[loop] = asyncio.Semaphore(self.initial_count)
+        return self.data[loop]

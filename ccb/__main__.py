@@ -29,7 +29,7 @@ def cmd_status(args):
     return asyncio.run(
         print_status_table(
             cci_path=args.cci,
-            recipes=args.recipe,
+            recipes_names=args.recipe,
             print_all=args.all,
         )
     )
@@ -41,7 +41,6 @@ def cmd_update(args):
             cci_path=args.cci,
             recipes=args.recipe,
             choose_version=args.choose_version,
-            folder=args.folder,
             run_test=not args.no_test,
             push_to=args.push_to,
             force=args.force,
@@ -158,10 +157,6 @@ def main():
         "--choose-version",
         action="store_true",
         help="Choose which upstream version to use (defaults to the latest)",
-    )
-    parser_update.add_argument(
-        "--folder",
-        help="Choose which recipe folder to use (default to the latest)",
     )
     parser_update.add_argument("--push-to", help="Remote name to push new branches to")
     parser_update.add_argument(

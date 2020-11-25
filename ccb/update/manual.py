@@ -26,17 +26,16 @@ class RecipeNotUpdatable(UpdateError):
 
 
 async def get_most_recent_upstream_version(recipe):
-    status = await recipe.status()
-
-    if status.up_to_date():
-        raise RecipeNotUpdatable("recipe is up-to-date")
-
-    if not status.update_possible():
-        raise RecipeNotUpdatable("update is not possible")
-
-    upstream_version = status.upstream_version
+    upstream_version = await recipe.upstream().most_recent_version()
     if upstream_version.unknown:
         raise UpstreamNotSupported("upstream version is unknown")
+
+    if recipe.version.up_to_date_with(upstream_version):
+        raise RecipeNotUpdatable("recipe is up-to-date")
+
+    if not recipe.version.updatable_to(upstream_version):
+        raise RecipeNotUpdatable("update is not possible")
+
     return upstream_version
 
 
@@ -45,7 +44,7 @@ async def get_user_choice_upstream_version(recipe):
     versions = list(
         sorted(
             v
-            for v in await recipe.upstream.versions()
+            for v in await recipe.upstream().versions()
             if v.fixed not in recipe_versions_fixed
         )
     )
@@ -69,13 +68,13 @@ async def manual_update_one_recipe(
     cci_path,
     recipe_name,
     choose_version,
-    folder,
     run_test,
     push_to,
     force,
     branch_prefix,
 ):
     recipe = Recipe(cci_path, recipe_name)
+    recipe = recipe.for_version(recipe.most_recent_version())
 
     if choose_version:
         upstream_version = await get_user_choice_upstream_version(recipe)
@@ -105,8 +104,7 @@ async def manual_update_one_recipe(
 
     status = await update_one_recipe(
         recipe=recipe,
-        upstream_version=upstream_version,
-        folder=folder,
+        new_upstream_version=upstream_version,
         run_test=run_test,
         push_to=push_to,
         force_push=force_push,
@@ -123,7 +121,6 @@ async def manual_update_recipes(
     cci_path,
     recipes,
     choose_version,
-    folder,
     run_test,
     push_to,
     force,
@@ -136,7 +133,6 @@ async def manual_update_recipes(
                 cci_path=cci_path,
                 recipe_name=recipe_name,
                 choose_version=choose_version,
-                folder=folder,
                 run_test=run_test,
                 push_to=push_to,
                 force=force,

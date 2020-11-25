@@ -1,40 +1,48 @@
 import os
 import json
 import time
+import typing
 import asyncio
 import logging
 import datetime
 import traceback
 
 from .common import update_one_recipe, UpdateStatus
-from ..recipe import Recipe, get_recipes_list
-from ..cci import cci_interface
-from ..status import get_status
+from ..version import Version
+from ..recipe import Recipe, VersionedRecipe, get_recipes_list
+from ..git import branch_exists, remove_branch
+from ..utils import format_duration
 
 
 logger = logging.getLogger(__name__)
 
 
+class RecipeInfo(typing.NamedTuple):
+    recipe: VersionedRecipe
+    new_upstream_version: Version
+    update_task: typing.Optional[asyncio.Task]
+
+
 async def auto_update_one_recipe(
-    recipe_name,
-    cci_path,
+    recipe,
+    new_upstream_version,
     branch_prefix,
     push_to,
 ):
-    recipe = Recipe(cci_path, recipe_name)
-    recipe_status = await recipe.status()
-    upstream_version = recipe_status.upstream_version
-    branch_name = f"{branch_prefix}{recipe.name}-{upstream_version.fixed}"
-
-    if await recipe_status.prs_opened():
-        logger.info("%s: skipped (PR exists)", recipe.name)
-        return UpdateStatus(updated=False, details="PR exists")
+    assert isinstance(recipe, VersionedRecipe)
+    branch_name = f"{branch_prefix}{recipe.name}-{new_upstream_version.fixed}"
 
     try:
+        if await recipe.prs_opened_for(new_upstream_version):
+            logger.info("%s: skipped (PR exists)", recipe.name)
+            return UpdateStatus(updated=False, details="PR exists")
+
+        if await branch_exists(recipe, branch_name):
+            await remove_branch(recipe, branch_name)
+
         return await update_one_recipe(
             recipe=recipe,
-            upstream_version=upstream_version,
-            folder=None,
+            new_upstream_version=new_upstream_version,
             run_test=True,
             push_to=push_to,
             force_push=True,
@@ -49,77 +57,101 @@ async def auto_update_one_recipe(
         return UpdateStatus(updated=False, details=traceback.format_exc())
 
 
+def format_optional_date(maybe_date):
+    if not maybe_date:
+        return None
+    return maybe_date.isoformat()
+
+
+async def generate_recipe_update_status(info: RecipeInfo):
+    recipe = info.recipe
+    recipe_upstream_version = await recipe.upstream_version()
+    new_upstream_version = info.new_upstream_version
+    update = info.update_task.result() if info.update_task else UpdateStatus(False)
+    return {
+        "name": recipe.name,
+        "homepage": recipe.homepage,
+        "current": {
+            "version": recipe.version.original,
+            "tag": recipe_upstream_version.original,
+            "date": format_optional_date(recipe_upstream_version.meta.date),
+            "commit_count": recipe_upstream_version.meta.commit_count,
+        },
+        "new": {
+            "version": new_upstream_version.fixed,
+            "tag": new_upstream_version.original,
+            "date": format_optional_date(new_upstream_version.meta.date),
+            "commit_count": new_upstream_version.meta.commit_count,
+        },
+        "deprecated": recipe.deprecated,
+        "inconsistent_versioning": recipe.version.inconsistent_with(
+            new_upstream_version
+        ),
+        "updatable": recipe.version.updatable_to(new_upstream_version),
+        "up_to_date": recipe.version.up_to_date_with(new_upstream_version),
+        "supported": recipe.supported,
+        "prs_opened": [
+            {
+                "number": pr.number,
+                "url": pr.url,
+            }
+            for pr in await recipe.prs_opened_for(new_upstream_version)
+        ],
+        "updated_branch": {
+            "owner": update.branch_remote_owner,
+            "repo": update.branch_remote_repo,
+            "branch": update.branch_name,
+        },
+        "update_error": update.details,
+        "test_error": update.test_status.error if update.test_status else None,
+    }
+
+
 async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     t0 = time.time()
-    recipes = get_recipes_list(cci_path)
+    recipes = [Recipe(cci_path, name) for name in get_recipes_list(cci_path)]
+    recipes = list(sorted(recipes, key=lambda r: r.name))
 
-    # fetch PRs while getting status, it will be cached for later
-    status, _ = await asyncio.gather(
-        get_status(cci_path, recipes),
-        cci_interface.pull_requests(),
+    logger.info("parsing upstreams for %s recipes", len(recipes))
+    recipes = [recipe.for_version(recipe.most_recent_version()) for recipe in recipes]
+    new_upstream_versions = await asyncio.gather(
+        *[recipe.upstream().most_recent_version() for recipe in recipes]
     )
-
-    status = [s for s in status if not s.deprecated]
-    status = list(sorted(status, key=lambda s: s.name))
-    updatable = [s for s in status if s.update_possible()]
-    updatable_names = [s.name for s in updatable]
-
-    update_tasks = [
-        asyncio.create_task(
-            auto_update_one_recipe(
-                recipe_name,
-                cci_path,
-                branch_prefix,
-                push_to,
+    logger.info(
+        "parsed %s upstreams in %s", len(recipes), format_duration(time.time() - t0)
+    )
+    infos = [
+        RecipeInfo(
+            r,
+            v,
+            asyncio.create_task(
+                auto_update_one_recipe(
+                    r,
+                    v,
+                    branch_prefix,
+                    push_to,
+                )
             )
+            if not r.deprecated and r.version.updatable_to(v)
+            else None,
         )
-        for recipe_name in updatable_names
+        for (r, v) in zip(recipes, new_upstream_versions)
     ]
 
+    update_tasks = [info.update_task for info in infos if info.update_task]
     for i, coro in enumerate(asyncio.as_completed(update_tasks)):
         await coro
         logger.info("-- %s/%s update done --", i + 1, len(update_tasks))
 
-    update_status = dict(zip(updatable_names, [t.result() for t in update_tasks]))
-
     duration = time.time() - t0
-
-    async def _generate_recipe_update_status(status):
-        update = update_status.get(status.name, UpdateStatus(updated=False))
-        return {
-            "name": status.name,
-            "homepage": status.homepage,
-            "recipe_version": status.recipe_version.original,
-            "upstream_version": status.upstream_version.fixed,
-            "upstream_tag": status.upstream_version.original,
-            "deprecated": status.deprecated,
-            "inconsistent_versioning": status.inconsistent_versioning(),
-            "updatable": status.update_possible(),
-            "up_to_date": status.up_to_date(),
-            "supported": not status.deprecated
-            and status.update_possible()
-            or status.up_to_date(),
-            "prs_opened": [
-                {
-                    "number": pr.number,
-                    "url": pr.url,
-                }
-                for pr in await status.prs_opened()
-            ],
-            "updated_branch": {
-                "owner": update.branch_remote_owner,
-                "repo": update.branch_remote_repo,
-                "branch": update.branch_name,
-            },
-            "update_error": update.details,
-            "test_error": update.test_status.error if update.test_status else None,
-        }
 
     status = {
         "date": datetime.datetime.now().isoformat(),
         "duration": duration,
-        "version": 1,
-        "recipes": [await _generate_recipe_update_status(s) for s in status],
+        "version": 2,
+        "recipes": await asyncio.gather(
+            *[generate_recipe_update_status(info) for info in infos]
+        ),
         "github_action_run_id": os.environ.get("GITHUB_RUN_ID", None),
     }
     print(json.dumps(status))

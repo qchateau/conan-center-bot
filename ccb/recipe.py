@@ -1,9 +1,9 @@
 import os
+import re
 import typing
 import inspect
 import logging
 import importlib.util
-from functools import lru_cache
 
 from conans import ConanFile
 
@@ -24,38 +24,11 @@ class RecipeError(RuntimeError):
     pass
 
 
-class Status(typing.NamedTuple):
-    name: str
-    homepage: str
-    recipe_version: Version
-    upstream_version: Version
-    deprecated: bool
-
-    def update_possible(self):
-        return (
-            not self.upstream_version.unknown
-            and not self.recipe_version.unknown
-            and self.upstream_version.is_date == self.recipe_version.is_date
-            and self.upstream_version > self.recipe_version
-        )
-
-    def up_to_date(self):
-        return (
-            not self.upstream_version.unknown
-            and not self.recipe_version.unknown
-            and self.upstream_version.is_date == self.recipe_version.is_date
-            and self.upstream_version <= self.recipe_version
-        )
-
-    def inconsistent_versioning(self):
-        return (
-            not self.upstream_version.unknown
-            and not self.recipe_version.unknown
-            and self.upstream_version.is_date != self.recipe_version.is_date
-        )
-
-    async def prs_opened(self):
-        return await cci_interface.pull_request_for(self)
+class LibPullRequest(typing.NamedTuple):
+    library: str
+    version: Version
+    url: str
+    number: int
 
 
 class Recipe:
@@ -64,6 +37,10 @@ class Recipe:
         self.path = os.path.join(cci_path, "recipes", name)
         self.config_path = os.path.join(self.path, "config.yml")
 
+    @property
+    def supported(self):
+        return os.path.exists(self.config_path)
+
     def config(self):
         if not os.path.exists(self.config_path):
             raise RecipeError("No config.yml file")
@@ -71,16 +48,18 @@ class Recipe:
         with open(self.config_path) as fil:
             return yaml.load(fil)
 
-    @property
-    @lru_cache(None)
-    def upstream(self):
-        return get_upstream_project(self)
-
     def versions(self):
-        return [Version(v) for v in self.config()["versions"].keys()]
+        try:
+            return [Version(v) for v in self.config()["versions"].keys()]
+        except RecipeError as exc:
+            logger.debug("%s: could not find versions: %s", self.name, exc)
+            return []
 
     def most_recent_version(self):
-        return sorted(self.versions())[-1]
+        versions = self.versions()
+        if not versions:
+            return Version()
+        return sorted(versions)[-1]
 
     def folder(self, version):
         assert isinstance(version, Version)
@@ -90,86 +69,130 @@ class Recipe:
                 return v["folder"]
         raise KeyError(version)
 
-    def cmakelists_path(self, version_or_folder):
-        if isinstance(version_or_folder, Version):
-            folder = self.folder(version_or_folder)
-        else:
-            folder = version_or_folder
-        return os.path.join(self.path, folder, "test_package", "CMakeLists.txt")
+    def for_version(self, version):
+        return VersionedRecipe(self, version)
 
-    def source(self, version):
-        conandata = self.conandata(version)
-        for k, v in conandata["sources"].items():
-            if Version(k) == version:
-                return v
-        raise KeyError(version)
 
-    async def status(self, recipe_version=None, upstream_version=None):
-        try:
-            recipe_version = recipe_version or self.most_recent_version()
-            recipe_upstream_version = (
-                upstream_version or await self.upstream.most_recent_version()
-            )
-            homepage = self.upstream.homepage
-            deprecated = bool(
-                getattr(self.conanfile_class(recipe_version), "deprecated", False)
-            )
-        except RecipeError as exc:
-            logger.debug("%s: could not find version: %s", self.name, exc)
-            recipe_version = Version()
-            recipe_upstream_version = Version()
-            homepage = None
-            deprecated = None
+class VersionedRecipe:
+    def __init__(self, recipe, version):
+        assert isinstance(recipe, Recipe)
+        self._recipe = recipe
+        self.name = recipe.name
+        self.path = recipe.path
+        self.config_path = recipe.config_path
+        self.version = version
+        self.__upstream = None
+        self.__conanfile_class = None
 
-        return Status(
-            self.name,
-            homepage,
-            recipe_version,
-            recipe_upstream_version,
-            deprecated,
+    @property
+    def folder(self):
+        return self._recipe.folder(self.version)
+
+    @property
+    def folder_path(self):
+        return os.path.join(self.path, self.folder)
+
+    @property
+    def cmakelists_path(self):
+        return os.path.join(self.folder_path, "test_package", "CMakeLists.txt")
+
+    @property
+    def conandata_path(self):
+        return os.path.join(self.folder_path, "conandata.yml")
+
+    @property
+    def conanfile_path(self):
+        return os.path.join(self.folder_path, "conanfile.py")
+
+    @property
+    def supported(self):
+        return (
+            self._recipe.supported
+            and os.path.exists(self.conandata_path)
+            and os.path.exists(self.conanfile_path)
         )
 
-    def conandata(self, version_or_folder):
-        path = self.conandata_path(version_or_folder)
-        if not os.path.exists(path):
+    @property
+    def homepage(self):
+        if not self.supported:
+            return None
+        return self.conanfile_class().homepage
+
+    @property
+    def deprecated(self):
+        if not self.supported:
+            return False
+        return getattr(self.conanfile_class(), "deprecated", False)
+
+    def upstream(self):
+        if self.__upstream is None:
+            self.__upstream = get_upstream_project(self)
+        return self.__upstream
+
+    def config(self):
+        return self._recipe.config()
+
+    def conandata(self):
+        if not os.path.exists(self.conandata_path):
             raise RecipeError("no conandata.yml")
-        with open(path) as fil:
+        with open(self.conandata_path) as fil:
             return yaml.load(fil)
 
-    def conandata_path(self, version_or_folder):
-        if isinstance(version_or_folder, Version):
-            folder = self.folder(version_or_folder)
-        else:
-            folder = version_or_folder
-        return os.path.join(self.path, folder, "conandata.yml")
+    def source(self):
+        conandata = self.conandata()
+        for k, v in conandata["sources"].items():
+            if Version(k) == self.version:
+                return v
+        raise KeyError(self.version)
 
-    @lru_cache(None)
-    def conanfile_class(self, version):
-        assert isinstance(version, Version)
+    def conanfile_class(self):
+        if self.__conanfile_class is None:
+            if not os.path.exists(self.conanfile_path):
+                raise RecipeError("no conanfile.py")
 
-        version_folder_path = os.path.join(self.path, self.folder(version))
+            spec = importlib.util.spec_from_file_location(
+                "conanfile", self.conanfile_path
+            )
+            conanfile = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(conanfile)
 
-        spec = importlib.util.spec_from_file_location(
-            "conanfile", os.path.join(version_folder_path, "conanfile.py")
-        )
-        conanfile = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(conanfile)
+            conanfile_main_class = None
+            for symbol_name in dir(conanfile):
+                symbol = getattr(conanfile, symbol_name)
+                if (
+                    inspect.isclass(symbol)
+                    and issubclass(symbol, ConanFile)
+                    and symbol is not ConanFile
+                ):
+                    conanfile_main_class = symbol
+                    break
 
-        conanfile_main_class = None
-        for symbol_name in dir(conanfile):
-            symbol = getattr(conanfile, symbol_name)
-            if (
-                inspect.isclass(symbol)
-                and issubclass(symbol, ConanFile)
-                and symbol is not ConanFile
-            ):
-                conanfile_main_class = symbol
-                break
+            if conanfile_main_class is None:
+                raise RecipeError("Could not find ConanFile class")
 
-        if conanfile_main_class is None:
-            raise RecipeError("Could not find ConanFile class")
+            self.__conanfile_class = conanfile_main_class
+        return self.__conanfile_class
 
-        return conanfile_main_class
+    async def prs_opened_for(self, upstream_version: Version):
+        body_re = re.compile(self.name + r"/" + upstream_version.fixed)
+        title_re = re.compile(self.name + r".*" + upstream_version.fixed)
 
-    def version_exists(self, version):
-        return version.fixed in self.config()["versions"]
+        return [
+            LibPullRequest(
+                library=self.name,
+                version=upstream_version.fixed,
+                url=pr["html_url"],
+                number=pr["number"],
+            )
+            for pr in await cci_interface.pull_requests()
+            if body_re.search(pr.get("body", ""))
+            or title_re.search(pr.get("title", ""))
+        ]
+
+    async def upstream_version(self):
+        upstream_versions = await self.upstream().versions()
+        for version in upstream_versions:
+            if version == self.version:
+                return version
+        logger.debug("%s: cannot get version meta (no match in upstream)", self.name)
+        return Version()
