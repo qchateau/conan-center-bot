@@ -3,7 +3,7 @@ import tempfile
 import subprocess
 import shutil
 
-from .recipe import Recipe
+from .recipe import Recipe, VersionedRecipe
 from .subprocess import call, check_call
 
 
@@ -19,9 +19,12 @@ class RecipeInWorktree:
                 ["git", "worktree", "add", "-q", "--checkout", "--detach", self.tmpdir],
                 cwd=self.recipe.path,
             )
-            return Recipe(self.tmpdir, self.recipe.name)
+            new_recipe = Recipe(self.tmpdir, self.recipe.name)
+            if isinstance(self.recipe, VersionedRecipe):
+                new_recipe = new_recipe.for_version(self.recipe.version)
+            return new_recipe
         except BaseException:
-            self.cleanup()
+            await self.cleanup()
             raise
 
     async def __aexit__(self, exc_type, exc_value, exc_traceback):

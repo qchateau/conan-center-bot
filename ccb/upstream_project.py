@@ -1,17 +1,22 @@
 import re
 import abc
+import time
+import typing
+import datetime
+import tempfile
 import hashlib
 import logging
 import aiohttp
 
-from .version import Version
+from .version import Version, VersionMeta
 from .project_specifics import (
     TAGS_BLACKLIST,
     PROJECT_TAGS_BLACKLIST,
     PROJECT_TAGS_WHITELIST,
     PROJECT_TAGS_FIXERS,
 )
-from .subprocess import check_output
+from .subprocess import check_output, check_call
+from .utils import SemaphoneStorage, format_duration
 
 
 logger = logging.getLogger(__name__)
@@ -21,27 +26,28 @@ class _Unsupported(RuntimeError):
     pass
 
 
+clone_sem = SemaphoneStorage(4)
+
+
 def get_upstream_project(recipe):
-    conanfile_class = recipe.conanfile_class(recipe.most_recent_version())
     for cls in _CLASSES:
         try:
-            return cls(recipe, conanfile_class)
+            return cls(recipe)
         except _Unsupported:
             pass
 
     logger.debug("%s: unsupported upstream", recipe.name)
-    return UnsupportedProject(recipe, conanfile_class)
+    return UnsupportedProject(recipe)
 
 
 class UpstreamProject(abc.ABC):
-    def __init__(self, recipe, conanfile_class):
+    def __init__(self, recipe):
         self.recipe = recipe
-        self.conanfile_class = conanfile_class
         self.__sha256 = {}
 
     @property
     def homepage(self) -> str:
-        return self.conanfile_class.homepage
+        return self.recipe.homepage
 
     @abc.abstractmethod
     async def versions(self) -> dict:
@@ -81,8 +87,13 @@ class UnsupportedProject(UpstreamProject):
 
 
 class GitProject(UpstreamProject):
-    def __init__(self, recipe, conanfile_class, git_url):
-        super().__init__(recipe, conanfile_class)
+    class _TagData(typing.NamedTuple):
+        name: str
+        date: datetime.datetime
+        commit_count: int
+
+    def __init__(self, recipe, git_url):
+        super().__init__(recipe)
         self.git_url = git_url
         self.whitelist = PROJECT_TAGS_WHITELIST.get(recipe.name, [])
         self.blacklist = TAGS_BLACKLIST + PROJECT_TAGS_BLACKLIST.get(recipe.name, [])
@@ -91,23 +102,7 @@ class GitProject(UpstreamProject):
 
     async def versions(self):
         if self.__versions is None:
-            logger.debug("%s: fetching tags...", self.recipe.name)
-            git_output = (
-                await check_output(["git", "ls-remote", "-t", self.git_url])
-            ).decode()
-
-            tags = [ref.replace("refs/tags/", "") for ref in git_output.split()[1::2]]
-            tags = list(set(tag[:-3] if tag.endswith("^{}") else tag for tag in tags))
-            logger.debug("%s: found tags: %s", self.recipe.name, tags)
-
-            valid_tags = self._filter_tags(tags)
-            logger.debug(
-                "%s: ignored %s tags", self.recipe.name, len(tags) - len(valid_tags)
-            )
-
-            self.__versions = tuple(
-                Version(version=tag, fixer=self.fixer) for tag in valid_tags
-            )
+            await self._clone_and_parse_git_repo()
         return self.__versions
 
     async def most_recent_version(self):
@@ -116,46 +111,105 @@ class GitProject(UpstreamProject):
             return Version()
         return sorted(versions)[-1]
 
-    def _filter_tags(self, tags):
-        valid_tags = list()
+    async def _clone_and_parse_git_repo(self):
+        async with clone_sem.get():
+            t0 = time.time()
+            with tempfile.TemporaryDirectory() as tmp:
+                logger.info("%s: cloning repository", self.recipe.name)
+                await check_call(["git", "clone", "-q", "-n", self.git_url, tmp])
+                logger.info("%s: parsing repository", self.recipe.name)
+                await self._parse_git_repo(tmp)
+            duration = time.time() - t0
+            logger.info(
+                "%s: parsed repository in %s",
+                self.recipe.name,
+                format_duration(duration),
+            )
+
+    async def _parse_git_repo(self, git_dir):
+        tags_data = await self._parse_tags(git_dir)
+        logger.debug(
+            "%s: found tags: %s",
+            self.recipe.name,
+            [t.name for t in tags_data],
+        )
+
+        self.__versions = list()
+        for tag_data in tags_data:
+            meta = VersionMeta(date=tag_data.date, commit_count=tag_data.commit_count)
+            self.__versions.append(
+                Version(version=tag_data.name, fixer=self.fixer, meta=meta)
+            )
+
+    async def _parse_tags(self, git_dir) -> typing.List[_TagData]:
+        output = await check_output(
+            [
+                "git",
+                "for-each-ref",
+                "--format",
+                "%(refname) %(taggerdate)%(committerdate)",
+                "refs/tags",
+            ],
+            cwd=git_dir,
+        )
+
+        dated_tags = [
+            (ref[10:], datetime.datetime.strptime(date, "%c %z"))
+            for ref, date in [line.split(" ", 1) for line in output.splitlines()]
+            if self._valid_tags(ref[10:])
+        ]
+
+        # don't gather, that's way too many sub-processes
+        commit_counts = [
+            await self._count_commits(dated_tag[0], git_dir) for dated_tag in dated_tags
+        ]
+
+        return [
+            self._TagData(tag, date, commit_count)
+            for (tag, date), commit_count in zip(dated_tags, commit_counts)
+        ]
+
+    @staticmethod
+    async def _count_commits(tag, git_dir):
+        output = await check_output(
+            ["git", "rev-list", "--count", f"refs/tags/{tag}"], cwd=git_dir
+        )
+        return int(output)
+
+    def _valid_tags(self, tag):
         if self.whitelist:
-            for tag in tags:
-                if any(regex.match(tag) for regex in self.whitelist):
-                    valid_tags.append(tag)
-                else:
+            if any(regex.match(tag) for regex in self.whitelist):
+                return True
+            else:
+                logger.debug(
+                    "%s: tag %s ignored because it does not match any of %s",
+                    self.recipe.name,
+                    tag,
+                    list(regex.pattern for regex in self.whitelist),
+                )
+                return False
+        else:
+            for regex in self.blacklist:
+                if regex.match(tag):
                     logger.debug(
-                        "%s: tag %s ignored because it does not match any of %s",
+                        "%s: tag %s ignored because it matches regex %s",
                         self.recipe.name,
                         tag,
-                        list(regex.pattern for regex in self.whitelist),
+                        regex.pattern,
                     )
-        else:
-            for tag in tags:
-                ignored = False
-                for regex in self.blacklist:
-                    if regex.match(tag):
-                        ignored = True
-                        logger.debug(
-                            "%s: tag %s ignored because it matches regex %s",
-                            self.recipe.name,
-                            tag,
-                            regex.pattern,
-                        )
-                        break
-                if not ignored:
-                    valid_tags.append(tag)
-        return valid_tags
+                    return False
+            return True
 
 
 class GithubProject(GitProject):
     HOMEPAGE_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
     SOURCE_URL_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
 
-    def __init__(self, recipe, conanfile_class):
-        owner, repo = self._get_owner_repo(recipe, conanfile_class)
+    def __init__(self, recipe):
+        owner, repo = self._get_owner_repo(recipe)
         git_url = f"https://github.com/{owner}/{repo}.git"
 
-        super().__init__(recipe, conanfile_class, git_url)
+        super().__init__(recipe, git_url)
         self.owner = owner
         self.repo = repo
 
@@ -165,19 +219,15 @@ class GithubProject(GitProject):
         return f"https://github.com/{self.owner}/{self.repo}/archive/{version.original}.tar.gz"
 
     @classmethod
-    def _get_owner_repo(cls, recipe, conanfile_class):
-        match = cls.HOMEPAGE_RE.match(conanfile_class.homepage)
-        if match:
-            return match.groups()
-
+    def _get_owner_repo(cls, recipe):
         try:
-            url = recipe.source(recipe.most_recent_version())["url"]
+            url = recipe.source()["url"]
             match = cls.SOURCE_URL_RE.match(url)
             if match:
                 return match.groups()
         except Exception as exc:
             logger.debug(
-                "recipe %s not supported as GitHub project because of the following exception: %s",
+                "%s: not supported as GitHub project because of the following exception: %s",
                 recipe.name,
                 repr(exc),
             )

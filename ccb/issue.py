@@ -106,9 +106,9 @@ async def update_status_issue(  # pylint: disable=too-many-locals
                 [
                     "",
                     f"[{r['name']}]({r['homepage']})",
-                    f"{r['recipe_version']}",
-                    f"{r['upstream_version']}",
-                    f"{r['upstream_tag']}",
+                    f"{r['current']['version']}",
+                    f"{r['new']['version']}",
+                    f"{r['new']['tag']}",
                     make_pr_text(r),
                     "",
                 ]
@@ -130,8 +130,8 @@ async def update_status_issue(  # pylint: disable=too-many-locals
                 [
                     "",
                     f"[{r['name']}]({r['homepage']})",
-                    f"{r['recipe_version']}",
-                    f"{r['upstream_tag']}",
+                    f"{r['current']['version']}",
+                    f"{r['new']['tag']}",
                     "",
                 ]
             )

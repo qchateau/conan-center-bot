@@ -9,55 +9,54 @@ from .recipe import Recipe
 logger = logging.getLogger(__name__)
 
 
-async def get_status(cci_path, recipes):
-    logger.info("Parsing %s recipes...", len(recipes))
-
-    return await asyncio.gather(
-        *[Recipe(cci_path, recipe).status() for recipe in recipes]
+async def print_status_table(cci_path, recipes_names, print_all):
+    recipes = [Recipe(cci_path, name) for name in recipes_names]
+    recipes = [r.for_version(r.most_recent_version()) for r in recipes]
+    recipes = list(sorted(recipes, key=lambda r: r.name))
+    new_upstream_versions = await asyncio.gather(
+        *[recipe.upstream().most_recent_version() for recipe in recipes]
     )
+    updates = list(zip(recipes, new_upstream_versions))
 
-
-async def print_status_table(cci_path, recipes, print_all):
-    status = await get_status(cci_path, recipes)
     table_data = [
         ["Name", "Recipe version", "New version", "Upstream version", "Pending PR"]
     ]
-    deprecated = [s for s in status if s.deprecated]
-    update_possible = [s for s in status if s.update_possible()]
-    up_to_date = [s for s in status if s.up_to_date()]
-    inconsistent_versioning = [s for s in status if s.inconsistent_versioning()]
-    unsupported_recipe = [s for s in status if s.recipe_version.unknown]
-    unsupported_upstream = [s for s in status if s.upstream_version.unknown]
+    deprecated = [r for r in recipes if r.deprecated]
+    update_possible = [r for r, v in updates if r.version.updatable_to(v)]
+    up_to_date = [r for r, v in updates if r.version.up_to_date_with(v)]
+    inconsistent_versioning = [r for r, v in updates if r.version.inconsistent_with(v)]
+    unsupported_recipe = [r for r in recipes if r.version.unknown]
+    unsupported_upstream = [r for r, v in updates if v.unknown]
 
-    for s in sorted(status, key=lambda r: r.name):
-        if not s.update_possible() and not print_all:
+    for r, v in updates:
+        if not r.version.updatable_to(v) and not print_all:
             continue
 
-        if s.deprecated:
+        if r.deprecated:
             continue
 
-        if s.recipe_version.unknown or s.upstream_version.unknown:
+        if r.version.unknown or v.unknown:
             name_color = fg("dark_gray")
-        elif s.update_possible():
+        elif r.version.updatable_to(v):
             name_color = fg("dark_orange")
-        elif s.up_to_date():
+        elif r.version.up_to_date_with(v):
             name_color = fg("green")
         else:
             name_color = fg("red")
 
-        prs = await s.prs_opened()
+        prs = await r.prs_opened_for(v)
         pr_text = str(len(prs))
 
-        rv_color = fg("green") if not s.recipe_version.unknown else fg("dark_gray")
-        uv_color = fg("green") if not s.upstream_version.unknown else fg("dark_gray")
+        rv_color = fg("green") if not r.version.unknown else fg("dark_gray")
+        uv_color = fg("green") if not v.unknown else fg("dark_gray")
         pr_color = fg("green") if prs else fg("dark_orange")
 
         table_data.append(
             [
-                stylize(s.name, name_color),
-                stylize(s.recipe_version, rv_color),
-                stylize(s.upstream_version.fixed, uv_color),
-                stylize(s.upstream_version, uv_color),
+                stylize(r.name, name_color),
+                stylize(r.version, rv_color),
+                stylize(v.fixed, uv_color),
+                stylize(v, uv_color),
                 stylize(pr_text, pr_color),
             ]
         )

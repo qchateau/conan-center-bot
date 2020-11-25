@@ -1,5 +1,7 @@
 import re
 import functools
+from datetime import datetime
+from typing import Optional, NamedTuple
 
 VERSION_DATE_RE = re.compile(r"([0-9]{4})[\.-_]?([0-9]{2})[\.-_]?([0-9]{2})")
 VERSION_RE = re.compile(r"[0-9]+(\.[0-9]+)+")
@@ -8,25 +10,44 @@ VERSION_COUNTER_RE = re.compile(r"^[rv]?([0-9]+)$")
 VERSION_UNDERSCORE_RE = re.compile(r"[0-9]+(_[0-9]+)+")
 
 
+class VersionMeta(NamedTuple):
+    date: Optional[datetime] = None
+    commit_count: Optional[int] = None
+
+
 @functools.total_ordering
 class Version:
     UNKNOWN = "unknown"
 
-    def __init__(self, version=UNKNOWN, fixer=None):
+    def __init__(self, version=UNKNOWN, fixer=None, meta=VersionMeta()):
         if fixer is None:
             fixer = _fix_version
         self.original = version
         self.fixed = fixer(version)
         self.to_numeric = _to_numeric(self.fixed)
-        self.is_date = bool(
-            VERSION_DATE_RE.search(
-                self.fixed if self.fixed != self.UNKNOWN else self.original
-            )
+        date_match = VERSION_DATE_RE.search(
+            self.fixed if self.fixed != self.UNKNOWN else self.original
         )
+        self.is_date = bool(date_match)
+        if not meta.date and self.is_date:
+            meta = meta._replace(date=datetime(*[int(v) for v in date_match.groups()]))
+        self.meta = meta
 
     @property
     def unknown(self):
         return self.original == self.UNKNOWN
+
+    def inconsistent_with(self, other):
+        return not other.unknown and not self.unknown and other.is_date != self.is_date
+
+    def consistent_with(self, other):
+        return not other.unknown and not self.unknown and other.is_date == self.is_date
+
+    def updatable_to(self, other):
+        return self.consistent_with(other) and (other > self)
+
+    def up_to_date_with(self, other):
+        return self.consistent_with(other) and (other <= self)
 
     def __hash__(self):
         return hash(self.fixed)

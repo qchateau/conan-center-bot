@@ -6,11 +6,11 @@ import typing
 import logging
 import subprocess
 
-from ..recipe import Recipe
+from ..recipe import VersionedRecipe
 from ..yaml import yaml, DoubleQuotes
 from ..version import Version
 from ..cci import cci_interface
-from ..utils import format_duration
+from ..utils import format_duration, LockStorage
 from ..subprocess import run
 from ..git import (
     RecipeInWorktree,
@@ -20,6 +20,7 @@ from ..git import (
 
 
 logger = logging.getLogger(__name__)
+test_lock = LockStorage()
 
 RE_TEST_ERRORS = [
     re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
@@ -56,13 +57,12 @@ def get_test_details(output):
     return "no details"
 
 
-async def patch_cmakelists_version(recipe, folder):
-    cmakelists_path = recipe.cmakelists_path(folder)
-    if not os.path.exists(cmakelists_path):
+async def patch_cmakelists_version(recipe):
+    if not os.path.exists(recipe.cmakelists_path):
         logger.warning("%s: CMakeLists.txt not found", recipe.name)
         return
 
-    with open(cmakelists_path) as f:
+    with open(recipe.cmakelists_path) as f:
         content = f.read()
 
     match = RE_CMAKELISTS_VERSION.search(content)
@@ -77,16 +77,16 @@ async def patch_cmakelists_version(recipe, folder):
     logger.info("%s: updating CMake minimum version", recipe.name)
     content = RE_CMAKELISTS_VERSION.sub(r"\g<1>3.1\g<3>", content)
 
-    with open(cmakelists_path, "w") as f:
+    with open(recipe.cmakelists_path, "w") as f:
         f.write(content)
 
 
-async def add_version(recipe, folder, conan_version, upstream_version):
-    most_recent_version = recipe.most_recent_version().original
-    url = recipe.upstream.source_url(upstream_version)
+async def add_version(recipe, upstream_version):
+    conan_version = upstream_version.fixed
+    url = recipe.upstream().source_url(upstream_version)
 
     logger.debug("%s: downloading source and computing its sha256 digest", recipe.name)
-    hash_digest = await recipe.upstream.source_sha256_digest(upstream_version)
+    hash_digest = await recipe.upstream().source_sha256_digest(upstream_version)
 
     def smart_insert(container, key, value):
         container_keys = list(container.keys())
@@ -108,14 +108,14 @@ async def add_version(recipe, folder, conan_version, upstream_version):
     logger.debug("%s: patching files", recipe.name)
     config = recipe.config()
     smart_insert(config["versions"], DoubleQuotes(conan_version), {})
-    config["versions"][conan_version]["folder"] = folder
+    config["versions"][conan_version]["folder"] = recipe.folder
 
-    conandata = recipe.conandata(folder)
+    conandata = recipe.conandata()
     smart_insert(conandata["sources"], DoubleQuotes(conan_version), {})
     conandata["sources"][conan_version]["url"] = DoubleQuotes(url)
     conandata["sources"][conan_version]["sha256"] = DoubleQuotes(hash_digest)
 
-    most_recent_patches = conandata.get("patches", {}).get(most_recent_version)
+    most_recent_patches = conandata.get("patches", {}).get(recipe.version.fixed)
     if most_recent_patches:
         smart_insert(
             conandata["patches"],
@@ -126,17 +126,17 @@ async def add_version(recipe, folder, conan_version, upstream_version):
     with open(recipe.config_path, "w") as fil:
         yaml.dump(config, fil)
 
-    with open(recipe.conandata_path(folder), "w") as fil:
+    with open(recipe.conandata_path, "w") as fil:
         yaml.dump(conandata, fil)
 
+    return conan_version
 
-async def test_recipe(recipe, folder, version_str, test_lock):
-    version_folder_path = os.path.join(recipe.path, folder)
 
+async def test_recipe(recipe, version_str):
     env = os.environ.copy()
     env["CONAN_HOOK_ERROR_LEVEL"] = "40"
 
-    async with test_lock:
+    async with test_lock.get():
         t0 = time.time()
         logger.info("%s: running test", recipe.name)
         process = await run(
@@ -149,63 +149,57 @@ async def test_recipe(recipe, folder, version_str, test_lock):
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            cwd=version_folder_path,
+            cwd=recipe.folder_path,
         )
         output, _ = await process.communicate()
         code = await process.wait()
         duration = time.time() - t0
 
-    if code == 0:
-        logger.info(
-            "%s: test passed in %s",
-            recipe.name,
-            format_duration(duration),
-        )
-        return TestStatus(success=True, duration=duration)
+        if code != 0:
+            output = output.decode()
+            logger.info(output)
+            logger.error(
+                "%s: test failed in %s",
+                recipe.name,
+                format_duration(duration),
+            )
+            return TestStatus(
+                success=False, duration=duration, error=get_test_details(output)
+            )
 
-    output = output.decode()
-    logger.info(output)
-    logger.error(
-        "%s: test failed in %s",
+    logger.info(
+        "%s: test passed in %s",
         recipe.name,
         format_duration(duration),
     )
-    return TestStatus(success=False, error=get_test_details(output), duration=duration)
+    return TestStatus(success=True, duration=duration)
 
 
 async def update_one_recipe(
     recipe,
-    upstream_version,
-    folder,
+    new_upstream_version,
     run_test,
     push_to,
     force_push,
     branch_name,
-    test_lock,
 ) -> UpdateStatus:
-    assert isinstance(recipe, Recipe)
-
-    conan_version = upstream_version.fixed
-    folder = folder or recipe.folder(recipe.most_recent_version())
+    assert isinstance(recipe, VersionedRecipe)
 
     logger.info(
-        "%s: adding version %s to folder %s in branch %s from upstream version %s",
+        "%s: adding upstream version %s based on %s in branch %s",
         recipe.name,
-        conan_version,
-        folder,
+        new_upstream_version,
+        recipe.version,
         branch_name,
-        upstream_version,
     )
 
     async with RecipeInWorktree(recipe) as new_recipe:
-        await patch_cmakelists_version(new_recipe, folder)
-        await add_version(new_recipe, folder, conan_version, upstream_version)
+        await patch_cmakelists_version(new_recipe)
+        conan_version = await add_version(new_recipe, new_upstream_version)
 
         test_status = None
         if run_test:
-            test_status = await test_recipe(
-                new_recipe, folder, conan_version, test_lock
-            )
+            test_status = await test_recipe(new_recipe, conan_version)
 
             if not test_status.success:
                 return UpdateStatus(

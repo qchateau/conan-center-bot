@@ -25,7 +25,8 @@ async def check_call(cmd, **kwargs):
 
 async def check_output(cmd, **kwargs):
     process = await run(cmd=cmd, stdout=PIPE, **kwargs)
+    stdout, _ = await process.communicate()
     code = await process.wait()
     if code != 0:
         raise SubprocessError(process)
-    return await process.stdout.read()
+    return stdout.decode()
