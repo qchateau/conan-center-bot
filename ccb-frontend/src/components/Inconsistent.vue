@@ -44,13 +44,13 @@ export default {
           text: 'Recipe version',
           align: 'start',
           sortable: false,
-          value: 'recipe_version'
+          value: 'current.version'
         },
         {
           text: 'Most recent upstream tag',
           align: 'start',
           sortable: false,
-          value: 'upstream_tag'
+          value: 'new.tag'
         }
       ]
     }
