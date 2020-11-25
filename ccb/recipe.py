@@ -195,4 +195,4 @@ class VersionedRecipe:
             if version == self.version:
                 return version
         logger.debug("%s: cannot get version meta (no match in upstream)", self.name)
-        return Version()
+        return Version(fixer=lambda _: self.version.original, meta=self.version.meta)

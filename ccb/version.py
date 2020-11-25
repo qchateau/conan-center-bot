@@ -25,11 +25,12 @@ class Version:
         self.original = version
         self.fixed = fixer(version)
         self.to_numeric = _to_numeric(self.fixed)
-        self.is_date = bool(
-            VERSION_DATE_RE.search(
-                self.fixed if self.fixed != self.UNKNOWN else self.original
-            )
+        date_match = VERSION_DATE_RE.search(
+            self.fixed if self.fixed != self.UNKNOWN else self.original
         )
+        self.is_date = bool(date_match)
+        if not meta.date and self.is_date:
+            meta = meta._replace(date=datetime(*[int(v) for v in date_match.groups()]))
         self.meta = meta
 
     @property
