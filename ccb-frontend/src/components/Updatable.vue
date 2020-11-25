@@ -7,10 +7,23 @@
         <br />When it's possible to auto-update them,
         you can directly open a PR by clicking on "Open one".
         <br />When it's not, you can see the error by expanding the row.
-        <v-text-field v-model="search" label="Search" />
+        <v-row>
+          <v-col cols="4">
+            <v-text-field v-model="search" label="Search" />
+          </v-col>
+          <v-col cols="8">
+            <v-select
+              v-model="enabledColumns"
+              :items="availableColumns"
+              attach
+              label="Columns"
+              multiple
+            ></v-select>
+          </v-col>
+        </v-row>
       </v-card-text>
       <v-data-table
-        :headers="recipesHeaders"
+        :headers="selectedHeaders"
         :items="selectedRecipes"
         :expanded.sync="expanded"
         :single-expand="true"
@@ -54,7 +67,7 @@ export default {
     return {
       search: '',
       expanded: [],
-      recipesHeaders: [
+      headers: [
         {
           text: 'Name',
           align: 'start',
@@ -84,8 +97,10 @@ export default {
           align: 'start',
           sortable: false,
           value: 'prs_opened'
-        },
-        { text: '', value: 'data-table-expand' }
+        }
+      ],
+      enabledColumns: [
+        'Name', 'Recipe version', 'New version', 'Upstream tag', 'Pull requests'
       ]
     }
   },
@@ -114,6 +129,14 @@ export default {
       let recipes = this.$recipes.status.recipes
       recipes = recipes.filter(x => x.updatable)
       return recipes
+    },
+    availableColumns () {
+      return this.headers.map(x => x.text)
+    },
+    selectedHeaders () {
+      let headers = this.headers.filter(x => this.enabledColumns.includes(x.text))
+      headers.push({ text: '', value: 'data-table-expand' })
+      return headers
     }
   }
 }
