@@ -21,6 +21,7 @@ class RecipeInfo(typing.NamedTuple):
     recipe: VersionedRecipe
     new_upstream_version: Version
     update_task: typing.Optional[asyncio.Task]
+    details: typing.Optional[str]
 
 
 async def auto_update_one_recipe(
@@ -89,7 +90,11 @@ async def generate_recipe_update_status(info: RecipeInfo):
         ),
         "updatable": recipe.version.updatable_to(new_upstream_version),
         "up_to_date": recipe.version.up_to_date_with(new_upstream_version),
-        "supported": recipe.supported,
+        "supported": (
+            recipe.supported
+            and not recipe.version.unknown
+            and not new_upstream_version.unknown
+        ),
         "prs_opened": [
             {
                 "number": pr.number,
@@ -102,9 +107,17 @@ async def generate_recipe_update_status(info: RecipeInfo):
             "repo": update.branch_remote_repo,
             "branch": update.branch_name,
         },
-        "update_error": update.details,
+        "details": update.details or info.details,
         "test_error": update.test_status.error if update.test_status else None,
     }
+
+
+async def recipe_info_details(recipe):
+    if not recipe.supported:
+        return "Unsupported recipe"
+    if (await recipe.upstream().most_recent_version()).unknown:
+        return "Unsupported upstream"
+    return None
 
 
 async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
@@ -129,9 +142,9 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     )
     infos = [
         RecipeInfo(
-            r,
-            v,
-            asyncio.create_task(
+            recipe=r,
+            new_upstream_version=v,
+            update_task=asyncio.create_task(
                 auto_update_one_recipe(
                     r,
                     v,
@@ -141,6 +154,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
             )
             if not r.deprecated and r.version.updatable_to(v)
             else None,
+            details=await recipe_info_details(r),
         )
         for (r, v) in zip(recipes, new_upstream_versions)
     ]
@@ -155,7 +169,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     status = {
         "date": datetime.datetime.now().isoformat(),
         "duration": duration,
-        "version": 2,
+        "version": 3,
         "recipes": await asyncio.gather(
             *[generate_recipe_update_status(info) for info in infos]
         ),

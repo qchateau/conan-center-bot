@@ -21,6 +21,7 @@
             <li>Recipes with error: {{ updatableRecipesWithError.length }}</li>
           </ul>
           <li>Inconsistent recipes: {{ inconsistentRecipes.length }}</li>
+          <li>Deprecated recipes: {{ deprecatedRecipes.length }}</li>
           <li>Unsupported recipes: {{ unsupportedRecipes.length }}</li>
         </ul>
       </v-card-text>
@@ -82,6 +83,9 @@ export default {
     },
     inconsistentRecipes () {
       return this.recipes.filter(x => x.inconsistent_versioning)
+    },
+    deprecatedRecipes () {
+      return this.recipes.filter(x => x.deprecated)
     },
     unsupportedRecipes () {
       return this.recipes.filter(x => !x.supported)
