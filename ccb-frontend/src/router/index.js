@@ -3,6 +3,7 @@ import Router from 'vue-router'
 import Status from '@/components/Status'
 import Updatable from '@/components/Updatable'
 import Inconsistent from '@/components/Inconsistent'
+import Unsupported from '@/components/Unsupported'
 import Api from '@/components/Api'
 
 Vue.use(Router)
@@ -38,6 +39,14 @@ export default new Router({
       component: Inconsistent,
       meta: {
         title: 'Conan Center Bot - Inconsistent'
+      }
+    },
+    {
+      path: '/unsupported',
+      name: 'Unsupported',
+      component: Unsupported,
+      meta: {
+        title: 'Conan Center Bot - Unsupported'
       }
     },
     {

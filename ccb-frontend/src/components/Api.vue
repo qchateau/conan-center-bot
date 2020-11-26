@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-card>
-      <v-card-title>Api</v-card-title>
+      <v-card-title>API</v-card-title>
       <v-card-text>
         This website data comes from
         <a :href="apiUrl">this JSON file</a>. Feel free to use it.

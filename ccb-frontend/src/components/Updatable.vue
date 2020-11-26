@@ -62,8 +62,8 @@
         <template v-slot:expanded-item="{ headers, item }">
           <td :colspan="headers.length">
             <span v-if="item.supported">
-              <pre v-if="item.update_error">{{item.update_error}}</pre>
-              <div v-else>No errors</div>
+              <pre v-if="item.details">{{item.details}}</pre>
+              <div v-else>No details</div>
             </span>
             <span v-else>
               <v-icon dark>mdi-cancel</v-icon>Unsupported
@@ -232,7 +232,7 @@ export default {
   computed: {
     selectedRecipes () {
       let recipes = this.$recipes.status.recipes
-      recipes = recipes.filter(x => x.updatable)
+      recipes = recipes.filter(x => !x.deprecated && x.updatable)
       recipes = recipes.map(x => {
         if (x.current.date && x.new.date) {
           let currentDate = new Date(x.current.date)
