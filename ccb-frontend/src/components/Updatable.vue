@@ -3,10 +3,12 @@
     <v-card>
       <v-card-title>Updatable recipes</v-card-title>
       <v-card-text>
-        These recipes are updatable.
-        <br />When it's possible to auto-update them,
-        you can directly open a PR by clicking on "Open one".
-        <br />When it's not, you can see the error by expanding the row.
+        <p>
+          Conan Center Bot attempts to auto-update the recipe, then to test the updated recipe.
+          Tests are ran on a default Ubuntu 20.04 image as provided by GitHub Actions.
+          <br />When the test passes, you can directly open a PR by clicking on "Open one".
+          <br />When it doesn't, you can see the error by expanding the row.
+        </p>
         <v-row>
           <v-col cols="4">
             <v-text-field v-model="search" label="Search" />
