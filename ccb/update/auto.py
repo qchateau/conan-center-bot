@@ -7,7 +7,7 @@ import logging
 import datetime
 import traceback
 
-from .common import update_one_recipe, UpdateStatus
+from .common import update_one_recipe, UpdateStatus, count_ccb_commits
 from ..version import Version
 from ..recipe import Recipe, VersionedRecipe, get_recipes_list
 from ..git import branch_exists, remove_branch
@@ -122,6 +122,8 @@ async def recipe_info_details(recipe):
 
 async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
     t0 = time.time()
+    ccb_commits_count = await count_ccb_commits(cci_path)
+    logger.info("found %s CCB commits in CCI", ccb_commits_count)
     recipes = [Recipe(cci_path, name) for name in get_recipes_list(cci_path)]
     recipes = list(sorted(recipes, key=lambda r: r.name))
 
@@ -174,6 +176,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
             *[generate_recipe_update_status(info) for info in infos]
         ),
         "github_action_run_id": os.environ.get("GITHUB_RUN_ID", None),
+        "ccb_commits_count": ccb_commits_count,
     }
     print(json.dumps(status))
     return 0
