@@ -4,7 +4,7 @@ import subprocess
 import shutil
 
 from .recipe import Recipe, VersionedRecipe
-from .subprocess import call, check_call
+from .subprocess import call, check_call, check_output
 
 
 class RecipeInWorktree:
@@ -96,3 +96,13 @@ async def push_branch(recipe, remote, branch_name, force):
         stderr=subprocess.DEVNULL,
         cwd=recipe.path,
     )
+
+
+async def count_commits_matching(git_path, pattern):
+    lines = (
+        await check_output(
+            ["git", "log", "--oneline", f"--grep={pattern}"],
+            cwd=git_path,
+        )
+    ).splitlines()
+    return len(lines)

@@ -16,6 +16,7 @@ from ..git import (
     RecipeInWorktree,
     push_branch,
     create_branch_and_commit,
+    count_commits_matching,
 )
 
 
@@ -55,6 +56,12 @@ def get_test_details(output):
         if errors:
             return "\n".join(errors)
     return "no details"
+
+
+async def count_ccb_commits(cci_path):
+    return await count_commits_matching(
+        cci_path, r"https:\/\/github\.com\/qchateau\/conan-center-bot"
+    )
 
 
 async def patch_cmakelists_version(recipe):

@@ -33,7 +33,10 @@
             href="https://github.com/qchateau/conan-center-bot"
           >Conan Center Bot</a>.
         </p>
-        <p>Any help improving this tool is welcome !</p>
+        <p>
+          Until now, {{ updatedRecipesCount }} recipe updates have used this tool.
+          Any help improving it is welcome !
+        </p>
       </v-card-text>
     </v-card>
   </div>
@@ -46,6 +49,9 @@ export default {
     }
   },
   computed: {
+    updatedRecipesCount () {
+      return this.$recipes.status.ccb_commits_count || 0
+    },
     date () {
       let date = new Date(this.$recipes.status.date)
       return date.toLocaleString('en-GB', {timeZoneName: 'short'})
