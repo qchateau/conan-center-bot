@@ -89,8 +89,8 @@ class UnsupportedProject(UpstreamProject):
 class GitProject(UpstreamProject):
     class _TagData(typing.NamedTuple):
         name: str
-        date: datetime.datetime
         commit_count: int
+        date: typing.Optional[datetime.datetime] = None
 
     def __init__(self, recipe, git_url):
         super().__init__(recipe)
@@ -153,27 +153,36 @@ class GitProject(UpstreamProject):
             cwd=git_dir,
         )
 
-        dated_tags = [
-            (ref[10:], datetime.datetime.strptime(date, "%c %z"))
-            for ref, date in [line.split(" ", 1) for line in output.splitlines()]
-            if self._valid_tags(ref[10:])
-        ]
+        tag_data = list()
 
-        # don't gather, that's way too many sub-processes
-        commit_counts = [
-            await self._count_commits(dated_tag[0], git_dir) for dated_tag in dated_tags
-        ]
+        for line in output.splitlines():
+            ref, date = line.split(" ", 1)
+            tag = ref[10:]
 
-        return [
-            self._TagData(tag, date, commit_count)
-            for (tag, date), commit_count in zip(dated_tags, commit_counts)
-        ]
+            if not self._valid_tags(tag):
+                continue
+
+            try:
+                date = datetime.datetime.strptime(date, "%c %z")
+            except ValueError as exc:
+                logger.debug(
+                    "%s: ignored tag '%s' date: %s",
+                    self.recipe.name,
+                    tag,
+                    exc,
+                )
+                date = None
+
+            # don't gather, that's way too many sub-processes
+            commit_count = await self._count_commits(ref, git_dir)
+
+            tag_data.append(self._TagData(tag, commit_count, date))
+
+        return tag_data
 
     @staticmethod
-    async def _count_commits(tag, git_dir):
-        output = await check_output(
-            ["git", "rev-list", "--count", f"refs/tags/{tag}"], cwd=git_dir
-        )
+    async def _count_commits(ref, git_dir):
+        output = await check_output(["git", "rev-list", "--count", ref], cwd=git_dir)
         return int(output)
 
     def _valid_tags(self, tag):
