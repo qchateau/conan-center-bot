@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import typing
@@ -15,6 +16,7 @@ from ..utils import format_duration
 
 
 logger = logging.getLogger(__name__)
+RE_ERROR_METHOD = re.compile(r"Error in (\w+)\(\) method")
 
 
 class RecipeInfo(typing.NamedTuple):
@@ -64,6 +66,33 @@ def format_optional_date(maybe_date):
     return maybe_date.isoformat()
 
 
+def get_error_category(error):
+    match_method = RE_ERROR_METHOD.search(error)
+    method = match_method.group(1) if match_method else None
+
+    if "Invalid configuration:" in error:
+        return "Invalid configuration"
+
+    if "Hook validation failed" in error:
+        return "Hook validation failed"
+
+    if "Package recipe with version" in error:
+        return "Bad recipe version"
+
+    if method == "build":
+        if "Failed to apply patch" in error:
+            return "Patch does not apply"
+
+    if method == "source":
+        if "FileNotFoundError" in error:
+            return "Source not found"
+
+    if method:
+        return f"Error in {method}()"
+
+    return "Other error"
+
+
 async def generate_recipe_update_status(info: RecipeInfo):
     recipe = info.recipe
     recipe_upstream_version = await recipe.upstream_version()
@@ -109,6 +138,11 @@ async def generate_recipe_update_status(info: RecipeInfo):
         },
         "details": update.details or info.details,
         "test_error": update.test_status.error if update.test_status else None,
+        "test_error_category": (
+            get_error_category(update.test_status.error)
+            if update.test_status and update.test_status.error
+            else None
+        ),
     }
 
 

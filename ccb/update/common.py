@@ -23,8 +23,8 @@ from ..git import (
 logger = logging.getLogger(__name__)
 test_lock = LockStorage()
 
+RE_HOOK_ERROR = re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M)
 RE_TEST_ERRORS = [
-    re.compile(r"^\[HOOK.*\].*:\s*ERROR:\s*(.*)$", re.M),
     re.compile(r"^ERROR:.*(Error in.*)", re.M | re.S),
     re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
     re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
@@ -51,10 +51,15 @@ class UpdateStatus(typing.NamedTuple):
 
 
 def get_test_details(output):
+    matches = list(RE_HOOK_ERROR.finditer(output))
+    if matches:
+        errors = [match.group(1) for match in matches]
+        return "Hook validation failed:\n" + "\n".join(errors)
+
     for regex in RE_TEST_ERRORS:
-        errors = [match.group(1) for match in regex.finditer(output)]
-        if errors:
-            return "\n".join(errors)
+        match = regex.search(output)
+        if match:
+            return match.group(1)
     return "no details"
 
 
