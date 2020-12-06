@@ -54,10 +54,10 @@
         <template v-slot:item.current.date="{ item }">{{ formatDate(item.current.date) }}</template>
         <template v-slot:item.new.date="{ item }">{{ formatDate(item.new.date) }}</template>
 
-        <template v-slot:item.prs_opened="{ item }">
-          <span v-for="link in prLinks(item)" :key="link.href">
-            <a v-if="link.href" :href="link.href">{{ link.text }}</a>
-            <span v-else>{{ link.text }}</span>
+        <template v-slot:item.pr_value="{ item }">
+          <span v-if="prError(item)">{{ prError(item) }}</span>
+          <span v-else v-for="link in prLinks(item)" :key="link.href">
+            <a :href="link.href">{{ link.text }}</a>
           </span>
         </template>
 
@@ -153,8 +153,8 @@ export default {
         {
           text: 'Pull requests',
           align: 'start',
-          sortable: false,
-          value: 'prs_opened'
+          sortable: true,
+          value: 'pr_value'
         }
       ],
       enabledColumns: [
@@ -166,6 +166,22 @@ export default {
     canOpenPr (recipe) {
       return recipe.updated_branch.owner && recipe.updated_branch.repo && recipe.updated_branch.branch
     },
+    prError (recipe) {
+      if (recipe.prs_opened.length > 0 || this.canOpenPr(recipe)) {
+        return null
+      }
+      return recipe.test_error_category
+    },
+    prValue (recipe) {
+      const err = this.prError(recipe)
+      if (err) {
+        return '1' + err
+      }
+      if (this.canOpenPr(recipe)) {
+        return '2'
+      }
+      return '3' + this.prLinks(recipe)[0].text
+    },
     prLinks (recipe) {
       if (recipe.prs_opened.length > 0) {
         return recipe.prs_opened.map(pr => ({
@@ -173,11 +189,6 @@ export default {
           href: pr.url
         }))
       }
-
-      if (!this.canOpenPr(recipe)) {
-        return [{text: 'No'}]
-      }
-
       const branch = recipe.updated_branch
       return [{text: 'Open one', href: `https://github.com/${branch.owner}/${branch.repo}/pull/new/${branch.branch}`}]
     },
@@ -244,6 +255,7 @@ export default {
         if (x.current.commit_count && x.new.commit_count) {
           x.commits_count_difference = x.new.commit_count - x.current.commit_count
         }
+        x.pr_value = this.prValue(x)
         return x
       })
       return recipes
