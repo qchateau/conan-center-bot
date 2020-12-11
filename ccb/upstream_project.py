@@ -6,6 +6,7 @@ import typing
 import datetime
 import tempfile
 import hashlib
+import traceback
 import logging
 import aiohttp
 
@@ -103,7 +104,12 @@ class GitProject(UpstreamProject):
 
     async def versions(self):
         if self.__versions is None:
-            await self._clone_and_parse_git_repo()
+            try:
+                await self._clone_and_parse_git_repo()
+            except Exception as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                self.__versions = dict()
         return self.__versions
 
     async def most_recent_version(self):
@@ -116,7 +122,7 @@ class GitProject(UpstreamProject):
         async with clone_sem.get():
             t0 = time.time()
             with tempfile.TemporaryDirectory() as tmp:
-                logger.info("%s: cloning repository", self.recipe.name)
+                logger.info("%s: cloning repository %s", self.recipe.name, self.git_url)
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
                 await check_call(
