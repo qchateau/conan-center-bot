@@ -1,4 +1,5 @@
 import re
+import os
 import abc
 import time
 import typing
@@ -116,7 +117,11 @@ class GitProject(UpstreamProject):
             t0 = time.time()
             with tempfile.TemporaryDirectory() as tmp:
                 logger.info("%s: cloning repository", self.recipe.name)
-                await check_call(["git", "clone", "-q", "-n", self.git_url, tmp])
+                env = os.environ.copy()
+                env["GIT_TERMINAL_PROMPT"] = "0"
+                await check_call(
+                    ["git", "clone", "-q", "-n", self.git_url, tmp], env=env
+                )
                 logger.info("%s: parsing repository", self.recipe.name)
                 await self._parse_git_repo(tmp)
             duration = time.time() - t0
