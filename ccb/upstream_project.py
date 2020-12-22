@@ -126,7 +126,8 @@ class GitProject(UpstreamProject):
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
                 await check_call(
-                    ["git", "clone", "-q", "-n", self.git_url, tmp], env=env
+                    ["git", "clone", "-q", "--filter=tree:0", "-n", self.git_url, tmp],
+                    env=env,
                 )
                 logger.info("%s: parsing repository", self.recipe.name)
                 await self._parse_git_repo(tmp)
