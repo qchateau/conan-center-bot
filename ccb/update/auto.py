@@ -79,6 +79,9 @@ def get_error_category(error):
     if "Package recipe with version" in error:
         return "Bad recipe version"
 
+    if "Patch already applied" in error:
+        return "Patch already applied"
+
     if method == "build":
         if "Failed to apply patch" in error:
             return "Patch does not apply"

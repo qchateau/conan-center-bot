@@ -29,6 +29,8 @@ RE_TEST_ERRORS = [
     re.compile(r"^ERROR:.*(Invalid configuration.*)", re.M | re.S),
     re.compile(r"^ERROR:\s*(.*)", re.M | re.S),
 ]
+RE_ALREADY_PATCHED = re.compile(r"WARN:\s*(.*):\s*already patched", re.M)
+RE_CREATE_ERRORS = [RE_ALREADY_PATCHED]
 
 RE_CMAKELISTS_VERSION = re.compile(
     r"(cmake_minimum_required\s*\(\s*VERSION\s*)([0-9\.]+)(\s*\))", re.I
@@ -60,6 +62,12 @@ def get_test_details(output):
         match = regex.search(output)
         if match:
             return match.group(1)
+
+    matches = list(RE_ALREADY_PATCHED.finditer(output))
+    if matches:
+        patches = {m.group(1) for m in matches}
+        return "Patch already applied:\n" + "\n".join(patches)
+
     return "no details"
 
 
@@ -164,17 +172,23 @@ async def test_recipe(recipe, version_str):
             cwd=recipe.folder_path,
         )
         output, _ = await process.communicate()
+        output = output.decode()
         code = await process.wait()
         duration = time.time() - t0
 
-        if code != 0:
-            output = output.decode()
-            logger.info(output)
-            logger.error(
-                "%s: test failed in %s",
-                recipe.name,
-                format_duration(duration),
-            )
+    if code != 0:
+        logger.info(output)
+        logger.error(
+            "%s: test failed in %s",
+            recipe.name,
+            format_duration(duration),
+        )
+        return TestStatus(
+            success=False, duration=duration, error=get_test_details(output)
+        )
+
+    for regex in RE_CREATE_ERRORS:
+        if regex.search(output):
             return TestStatus(
                 success=False, duration=duration, error=get_test_details(output)
             )
