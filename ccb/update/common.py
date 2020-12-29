@@ -31,8 +31,7 @@ RE_TEST_ERRORS = [
 ]
 
 RE_ALREADY_PATCHED = re.compile(r"WARN:\s*(.*):\s*already patched", re.M)
-RE_WARNING = re.compile(r"WARN:\s*(.*)", re.M)
-RE_CREATE_ERRORS = [RE_WARNING]
+RE_CREATE_ERRORS = [RE_ALREADY_PATCHED]
 
 RE_CMAKELISTS_VERSION = re.compile(
     r"(cmake_minimum_required\s*\(\s*VERSION\s*)([0-9\.]+)(\s*\))", re.I
@@ -69,11 +68,6 @@ def get_test_details(output):
     if matches:
         patches = {m.group(1) for m in matches}
         return "Patch already applied:\n" + "\n".join(patches)
-
-    matches = list(RE_WARNING.finditer(output))
-    if matches:
-        warnings = [m.group(1) for m in matches]
-        return "Warnings during conan create:\n" + "\n".join(warnings)
 
     return "no details"
 
