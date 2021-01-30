@@ -65,6 +65,10 @@ class Version:
         if self.is_date != other.is_date:
             # consider dates as old versions to avoid false positive
             return self.is_date
+        if self.to_numeric == other.to_numeric and False:
+            # parsed version are the same, but they may be different tags, use the date
+            if self.meta and self.meta.date and other.meta and other.meta.date:
+                return self.meta.date < other.meta.date
         return self.to_numeric < other.to_numeric
 
     def __str__(self):

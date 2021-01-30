@@ -157,11 +157,15 @@ async def recipe_info_details(recipe):
     return None
 
 
-async def auto_update_all_recipes(cci_path, branch_prefix, push_to):
+async def auto_update_all_recipes(cci_path, branch_prefix, push_to, recipes):
     t0 = time.time()
     ccb_commits_count = await count_ccb_commits(cci_path)
     logger.info("found %s CCB commits in CCI", ccb_commits_count)
-    recipes = [Recipe(cci_path, name) for name in get_recipes_list(cci_path)]
+    recipes = [
+        Recipe(cci_path, name)
+        for name in get_recipes_list(cci_path)
+        if recipes is None or name in recipes
+    ]
     recipes = list(sorted(recipes, key=lambda r: r.name))
 
     logger.info("parsing upstreams for %s recipes", len(recipes))
