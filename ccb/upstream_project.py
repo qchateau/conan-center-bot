@@ -109,7 +109,7 @@ class GitProject(UpstreamProject):
             except Exception as exc:
                 logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
                 logger.debug(traceback.format_exc())
-                self.__versions = dict()
+                self.__versions = list()
         return self.__versions
 
     async def most_recent_version(self):

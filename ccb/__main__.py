@@ -65,6 +65,7 @@ def cmd_auto_update_recipes(args):
             cci_path=args.cci,
             push_to=args.push_to,
             branch_prefix=args.branch_prefix,
+            recipes=args.recipe if args.recipe else None,
         )
     )
 
@@ -174,6 +175,11 @@ def main():
         "--branch-prefix",
         default="ccb-",
         help="Branch name prefix.",
+    )
+    parser_aur.add_argument(
+        "--recipe",
+        nargs="*",
+        help="Restrict to auto-update to a list of recipe.",
     )
     parser_aur.add_argument("--push-to", help="Remote name to push new branches to")
 
