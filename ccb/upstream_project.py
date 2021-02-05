@@ -52,7 +52,7 @@ class UpstreamProject(abc.ABC):
         return self.recipe.homepage
 
     @abc.abstractmethod
-    async def versions(self) -> dict:
+    async def versions(self) -> list:
         pass
 
     async def most_recent_version(self) -> Version:
@@ -81,7 +81,7 @@ class UpstreamProject(abc.ABC):
 
 class UnsupportedProject(UpstreamProject):
     async def versions(self):
-        return {}
+        return []
 
     def source_url(self, version):
         return None
