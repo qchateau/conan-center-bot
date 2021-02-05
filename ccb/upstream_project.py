@@ -255,5 +255,38 @@ class GithubProject(GitProject):
 
         raise _Unsupported()
 
+class GitlabProject(GitProject):
+    SOURCE_URL_RE = re.compile(r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/archive/")
 
-_CLASSES = [GithubProject]
+    def __init__(self, recipe):
+        domain, owner, repo = self._get_domain_owner_repo(recipe)
+        git_url = f"https://{domain}/{owner}/{repo}.git"
+
+        super().__init__(recipe, git_url)
+        self.domain = domain
+        self.owner = owner
+        self.repo = repo
+
+    def source_url(self, version):
+        if version.unknown:
+            return None
+        return f"https://{self.domain}/{self.owner}/{self.repo}/-/archive/{version.original}/{self.repo}-{version.original}.tar.gz"
+
+    @classmethod
+    def _get_domain_owner_repo(cls, recipe):
+        try:
+            url = recipe.source()["url"]
+            match = cls.SOURCE_URL_RE.match(url)
+            if match:
+                return match.groups()
+        except Exception as exc:
+            logger.debug(
+                "%s: not supported as Gitlab project because of the following exception: %s",
+                recipe.name,
+                repr(exc),
+            )
+
+        raise _Unsupported()
+
+
+_CLASSES = [GithubProject, GitlabProject]
