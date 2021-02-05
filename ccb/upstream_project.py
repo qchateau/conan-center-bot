@@ -52,12 +52,14 @@ class UpstreamProject(abc.ABC):
         return self.recipe.homepage
 
     @abc.abstractmethod
-    async def versions(self) -> dict:
+    async def versions(self) -> list:
         pass
 
-    @abc.abstractmethod
     async def most_recent_version(self) -> Version:
-        pass
+        versions = await self.versions()
+        if not versions:
+            return Version()
+        return sorted(versions)[-1]
 
     @abc.abstractmethod
     def source_url(self, version) -> str:
@@ -79,10 +81,7 @@ class UpstreamProject(abc.ABC):
 
 class UnsupportedProject(UpstreamProject):
     async def versions(self):
-        return {}
-
-    async def most_recent_version(self):
-        return Version()
+        return []
 
     def source_url(self, version):
         return None
@@ -111,12 +110,6 @@ class GitProject(UpstreamProject):
                 logger.debug(traceback.format_exc())
                 self.__versions = list()
         return self.__versions
-
-    async def most_recent_version(self):
-        versions = await self.versions()
-        if not versions:
-            return Version()
-        return sorted(versions)[-1]
 
     async def _clone_and_parse_git_repo(self):
         async with clone_sem.get():
@@ -288,5 +281,48 @@ class GitlabProject(GitProject):
 
         raise _Unsupported()
 
+class GnomeProject(UpstreamProject):
+    SOURCE_URL_RE = re.compile(r"https?://(download\.gnome\.org|ftp\.gnome\.org/pub/gnome)/sources/([^/]+)/")
 
-_CLASSES = [GithubProject, GitlabProject]
+    def __init__(self, recipe):
+        domain, project = self._get_project(recipe)
+        super().__init__(recipe)
+        self.domain = domain
+        self.project = project
+        self.__versions = None
+
+    @classmethod
+    def _get_project(cls, recipe):
+        try:
+            url = recipe.source()["url"]
+            match = cls.SOURCE_URL_RE.match(url)
+            if match:
+                return match.groups()
+        except Exception as exc:
+            logger.debug(
+                "%s: not supported as Gnome project because of the following exception: %s",
+                recipe.name,
+                repr(exc),
+            )
+        raise _Unsupported()
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as client:
+                    async with client.get(f"https://{self.domain}/sources/{self.project}/cache.json") as resp:
+                        d = await resp.json()
+                        self.__versions = [Version(v) for v in d[2][self.project]]
+            except Exception as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                self.__versions = list()
+        return self.__versions
+
+    def source_url(self, version):
+        if version.unknown:
+            return None
+        major, minor, patch = version.original.split(".")
+        return f"https://{self.domain}/sources/{self.project}/{major}.{minor}/{self.project}-{major}.{minor}.{patch}.tar.xz"
+
+_CLASSES = [GithubProject, GitlabProject, GnomeProject]
