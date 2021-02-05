@@ -289,10 +289,10 @@ class GitlabProject(GitProject):
         raise _Unsupported()
 
 class GnomeProject(UpstreamProject):
-    SOURCE_URL_RE = re.compile(r"https?://((download.gnome.org)|(ftp.gnome.org/pub/gnome))/sources/([^/]+)/")
+    SOURCE_URL_RE = re.compile(r"https?://(download\.gnome\.org|ftp\.gnome\.org/pub/gnome)/sources/([^/]+)/")
 
     def __init__(self, recipe):
-        domain, _, _, project = self._get_project(recipe)
+        domain, project = self._get_project(recipe)
         super().__init__(recipe)
         self.domain = domain
         self.project = project
