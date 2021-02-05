@@ -55,9 +55,11 @@ class UpstreamProject(abc.ABC):
     async def versions(self) -> dict:
         pass
 
-    @abc.abstractmethod
     async def most_recent_version(self) -> Version:
-        pass
+        versions = await self.versions()
+        if not versions:
+            return Version()
+        return sorted(versions)[-1]
 
     @abc.abstractmethod
     def source_url(self, version) -> str:
@@ -80,9 +82,6 @@ class UpstreamProject(abc.ABC):
 class UnsupportedProject(UpstreamProject):
     async def versions(self):
         return {}
-
-    async def most_recent_version(self):
-        return Version()
 
     def source_url(self, version):
         return None
@@ -111,12 +110,6 @@ class GitProject(UpstreamProject):
                 logger.debug(traceback.format_exc())
                 self.__versions = list()
         return self.__versions
-
-    async def most_recent_version(self):
-        versions = await self.versions()
-        if not versions:
-            return Version()
-        return sorted(versions)[-1]
 
     async def _clone_and_parse_git_repo(self):
         async with clone_sem.get():
@@ -325,12 +318,6 @@ class GnomeProject(UpstreamProject):
                 logger.debug(traceback.format_exc())
                 self.__versions = list()
         return self.__versions
-
-    async def most_recent_version(self):
-        versions = await self.versions()
-        if not versions:
-            return Version()
-        return sorted(versions)[-1]
 
     def source_url(self, version):
         if version.unknown:
