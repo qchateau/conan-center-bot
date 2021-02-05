@@ -93,7 +93,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://qchateau:$GITHUB_TOKEN@github.com/conan-center-bot-testing/conan-center-index.git
+          git clone https://${{ github.repository_owner }}:$GITHUB_TOKEN@github.com/conan-center-bot-testing/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -117,7 +117,7 @@ jobs:
             --no-link-pr \
             --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/4
+            https://github.com/$GITHUB_REPOSITORY/issues/4
 
       - name: Package
         run: python3 setup.py sdist

@@ -61,7 +61,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
+          git clone https://${{ github.repository_owner }}:$GITHUB_TOKEN@github.com/${{ github.repository_owner }}/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -84,7 +84,7 @@ jobs:
           conan-center-bot update-status-issue \
             --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/1 \
+            https://github.com/$GITHUB_REPOSITORY/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
 
       # Sleep to avoid deploying in both workflow at the same time
