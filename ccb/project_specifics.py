@@ -27,6 +27,7 @@ PROJECT_TAGS_BLACKLIST = {
     "libtorrent": [re.compile(r"^rc(.*)", re.I)] + TAGS_BLACKLIST,
     "qhull": [re.compile(r"[0-9]{4}\.[0-9]{1,2}")] + TAGS_BLACKLIST,
     "opencv": [re.compile(r"-openvino")] + TAGS_BLACKLIST,
+    "gstreamer": [re.compile(r"RELEASE-[0-9]*_[0-9]*_[0-9]*-[0-9]+")] + TAGS_BLACKLIST,
 }
 
 # Project-based whitelist, a blacklist must not be defined
