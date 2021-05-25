@@ -11,7 +11,7 @@ from ..yaml import yaml, DoubleQuotes
 from ..version import Version
 from ..cci import cci_interface
 from ..utils import format_duration, LockStorage
-from ..subprocess import run
+from ..subprocess import run, call
 from ..git import (
     RecipeInWorktree,
     push_branch,
@@ -160,13 +160,9 @@ async def test_recipe(recipe, version_str):
     async with test_lock.get():
         t0 = time.time()
         logger.info("%s: running test", recipe.name)
+        reference = f"{recipe.name}/{version_str}@"
         process = await run(
-            [
-                "conan",
-                "create",
-                ".",
-                f"{recipe.name}/{version_str}@",
-            ],
+            ["conan", "create", ".", reference],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -176,6 +172,12 @@ async def test_recipe(recipe, version_str):
         output = output.decode()
         code = await process.wait()
         duration = time.time() - t0
+
+        cleanup_code = await call(
+            ["conan", "remove", reference, "-b", "-f", "-p", "-s"]
+        )
+        if cleanup_code != 0:
+            logger.warning("%s: failed to cleanup after test", recipe.name)
 
     if code != 0:
         logger.info(output)
