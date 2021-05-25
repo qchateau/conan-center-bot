@@ -1,6 +1,6 @@
 import re
 import functools
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, NamedTuple
 
 VERSION_DATE_RE = re.compile(r"([0-9]{4})[\.-_]?([0-9]{2})[\.-_]?([0-9]{2})")
@@ -30,7 +30,11 @@ class Version:
         )
         self.is_date = bool(date_match)
         if not meta.date and self.is_date:
-            meta = meta._replace(date=datetime(*[int(v) for v in date_match.groups()]))
+            meta = meta._replace(
+                date=datetime(
+                    *[int(v) for v in date_match.groups()], tzinfo=timezone.utc
+                )
+            )
         self.meta = meta
 
     @property
@@ -65,7 +69,7 @@ class Version:
         if self.is_date != other.is_date:
             # consider dates as old versions to avoid false positive
             return self.is_date
-        if self.to_numeric == other.to_numeric and False:
+        if self.to_numeric == other.to_numeric:
             # parsed version are the same, but they may be different tags, use the date
             if self.meta and self.meta.date and other.meta and other.meta.date:
                 return self.meta.date < other.meta.date
