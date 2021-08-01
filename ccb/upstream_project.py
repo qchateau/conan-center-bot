@@ -28,7 +28,7 @@ class _Unsupported(RuntimeError):
     pass
 
 
-clone_sem = SemaphoneStorage(4)
+clone_sem = SemaphoneStorage(3)
 
 
 def get_upstream_project(recipe):
@@ -114,7 +114,7 @@ class GitProject(UpstreamProject):
     async def _clone_and_parse_git_repo(self):
         async with clone_sem.get():
             t0 = time.time()
-            with tempfile.TemporaryDirectory() as tmp:
+            with tempfile.TemporaryDirectory(prefix=f"ccb-{self.recipe.name}") as tmp:
                 logger.info("%s: cloning repository %s", self.recipe.name, self.git_url)
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
@@ -248,8 +248,11 @@ class GithubProject(GitProject):
 
         raise _Unsupported()
 
+
 class GitlabProject(GitProject):
-    SOURCE_URL_RE = re.compile(r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/archive/")
+    SOURCE_URL_RE = re.compile(
+        r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/archive/"
+    )
 
     def __init__(self, recipe):
         domain, owner, repo = self._get_domain_owner_repo(recipe)
@@ -281,8 +284,11 @@ class GitlabProject(GitProject):
 
         raise _Unsupported()
 
+
 class GnomeProject(UpstreamProject):
-    SOURCE_URL_RE = re.compile(r"https?://(download\.gnome\.org|ftp\.gnome\.org/pub/gnome)/sources/([^/]+)/")
+    SOURCE_URL_RE = re.compile(
+        r"https?://(download\.gnome\.org|ftp\.gnome\.org/pub/gnome)/sources/([^/]+)/"
+    )
 
     def __init__(self, recipe):
         domain, project = self._get_project(recipe)
@@ -310,7 +316,9 @@ class GnomeProject(UpstreamProject):
         if self.__versions is None:
             try:
                 async with aiohttp.ClientSession(raise_for_status=True) as client:
-                    async with client.get(f"https://{self.domain}/sources/{self.project}/cache.json") as resp:
+                    async with client.get(
+                        f"https://{self.domain}/sources/{self.project}/cache.json"
+                    ) as resp:
                         d = await resp.json()
                         self.__versions = [Version(v) for v in d[2][self.project]]
             except Exception as exc:
@@ -324,5 +332,6 @@ class GnomeProject(UpstreamProject):
             return None
         major, minor, patch = version.original.split(".")
         return f"https://{self.domain}/sources/{self.project}/{major}.{minor}/{self.project}-{major}.{minor}.{patch}.tar.xz"
+
 
 _CLASSES = [GithubProject, GitlabProject, GnomeProject]
