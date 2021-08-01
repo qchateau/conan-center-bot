@@ -170,7 +170,7 @@ export default {
       if (recipe.prs_opened.length > 0 || this.canOpenPr(recipe)) {
         return null
       }
-      return recipe.test_error_category
+      return recipe.test_error_category || 'Unknown error'
     },
     prValue (recipe) {
       const err = this.prError(recipe)
