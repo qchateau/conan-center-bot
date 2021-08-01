@@ -114,7 +114,7 @@ class GitProject(UpstreamProject):
     async def _clone_and_parse_git_repo(self):
         async with clone_sem.get():
             t0 = time.time()
-            with tempfile.TemporaryDirectory() as tmp:
+            with tempfile.TemporaryDirectory(prefix=f"ccb-{self.recipe.name}") as tmp:
                 logger.info("%s: cloning repository %s", self.recipe.name, self.git_url)
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
