@@ -57,6 +57,9 @@ disable=
     missing-docstring,
     no-else-return,
     too-few-public-methods,
+    use-list-literal,
+    use-dict-literal,
+    unspecified-encoding,
     # handled by black
     format
 
