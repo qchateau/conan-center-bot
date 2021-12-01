@@ -185,8 +185,8 @@ class VersionedRecipe:
                 number=pr["number"],
             )
             for pr in await cci_interface.pull_requests()
-            if body_re.search(pr.get("body", ""))
-            or title_re.search(pr.get("title", ""))
+            if body_re.search(pr.get("body") or "")
+            or title_re.search(pr.get("title") or "")
         ]
 
     async def upstream_version(self):
