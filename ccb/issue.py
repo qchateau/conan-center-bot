@@ -36,7 +36,6 @@ async def _update_issue(issue_url, content):
                     return True
 
                 logger.error("update failed: %s (%d)", resp.reason, resp.status)
-                logger.debug(resp.text())
                 time.sleep(TRY_SLEEP)
 
     return False
