@@ -1,4 +1,5 @@
 import re
+import time
 import json
 import datetime
 import logging
@@ -8,6 +9,8 @@ from .github import get_github_token
 from .utils import format_duration
 
 
+NTRY = 3
+TRY_SLEEP = 10
 ISSUE_URL_RE = re.compile(r"github.com/([^/]+)/([^/]+)/issues/([0-9]+)")
 logger = logging.getLogger(__name__)
 
@@ -26,14 +29,17 @@ async def _update_issue(issue_url, content):
         headers["Authorization"] = f"token {github_token}"
     data = {"body": content}
 
-    async with aiohttp.ClientSession() as client:
-        async with client.patch(url, json=data, headers=headers) as resp:
-            if resp.ok:
-                return True
+    for _ in range(NTRY):
+        async with aiohttp.ClientSession() as client:
+            async with client.patch(url, json=data, headers=headers) as resp:
+                if resp.ok:
+                    return True
 
-            logger.error("update failed: %s (%d)", resp.reason, resp.status)
-            logger.debug(resp.text())
-            return False
+                logger.error("update failed: %s (%d)", resp.reason, resp.status)
+                logger.debug(resp.text())
+                time.sleep(TRY_SLEEP)
+
+    return False
 
 
 async def update_status_issue(  # pylint: disable=too-many-locals
