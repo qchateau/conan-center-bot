@@ -31,7 +31,8 @@ async def _update_issue(issue_url, content):
             if resp.ok:
                 return True
 
-            logger.error("update failed: %s", resp.reason)
+            logger.error("update failed: %s (%d)", resp.reason, resp.status)
+            logger.debug(resp.text())
             return False
 
 
