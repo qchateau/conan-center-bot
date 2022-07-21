@@ -43,6 +43,7 @@ PROJECT_TAGS_WHITELIST = {
     "openimageio": [re.compile(r"^Release-([0-9]+(\.[0-9]+)+)$")],
     "thrust": [re.compile(r"^[0-9]+([\.-][0-9]+)+$")],
     "mbedtls": [re.compile(r"^mbedtls-([0-9]+(\.[0-9]+)+)$")],
+    "mcap": [re.compile(r"^releases\/cpp\/(.*)")],
 }
 
 # Project-based tag fixer, must convert the tag to a "x.y.z" version
