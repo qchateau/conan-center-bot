@@ -22,7 +22,7 @@ RE_ERROR_METHOD = re.compile(r"Error in (\w+)\(\) method")
 class RecipeInfo(typing.NamedTuple):
     recipe: VersionedRecipe
     new_upstream_version: Version
-    update_task: typing.Optional[asyncio.Task]
+    update_task: asyncio.Task
     details: typing.Optional[str]
 
 
@@ -33,9 +33,16 @@ async def auto_update_one_recipe(
     push_to,
 ):
     assert isinstance(recipe, VersionedRecipe)
+
     branch_name = f"{branch_prefix}{recipe.name}-{new_upstream_version.fixed}"
 
     try:
+        if recipe.deprecated:
+            return UpdateStatus(updated=False, details="recipe is deprecated")
+
+        if not recipe.version.updatable_to(new_upstream_version):
+            return UpdateStatus(updated=False, details="recipe is not updatable")
+
         if await recipe.prs_opened_for(new_upstream_version):
             logger.info("%s: skipped (PR exists)", recipe.name)
             return UpdateStatus(updated=False, details="PR exists")
@@ -100,7 +107,7 @@ async def generate_recipe_update_status(info: RecipeInfo):
     recipe = info.recipe
     recipe_upstream_version = await recipe.upstream_version()
     new_upstream_version = info.new_upstream_version
-    update = info.update_task.result() if info.update_task else UpdateStatus(False)
+    update = info.update_task.result()
     return {
         "name": recipe.name,
         "homepage": recipe.homepage,
@@ -194,15 +201,13 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to, recipes):
                     branch_prefix,
                     push_to,
                 )
-            )
-            if not r.deprecated and r.version.updatable_to(v)
-            else None,
+            ),
             details=await recipe_info_details(r),
         )
         for (r, v) in zip(recipes, new_upstream_versions)
     ]
 
-    update_tasks = [info.update_task for info in infos if info.update_task]
+    update_tasks = [info.update_task for info in infos]
     for i, coro in enumerate(asyncio.as_completed(update_tasks)):
         await coro
         logger.info("-- %s/%s update done --", i + 1, len(update_tasks))
