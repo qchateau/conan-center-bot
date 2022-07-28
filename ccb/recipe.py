@@ -9,6 +9,7 @@ from conans import ConanFile
 
 from .version import Version
 from .upstream_project import get_upstream_project
+from .utils import return_on_exc
 from .cci import cci_interface
 from .yaml import yaml
 
@@ -113,12 +114,14 @@ class VersionedRecipe:
         )
 
     @property
+    @return_on_exc(logger, None)
     def homepage(self):
         if not self.supported:
             return None
         return self.conanfile_class().homepage
 
     @property
+    @return_on_exc(logger, False)
     def deprecated(self):
         if not self.supported:
             return False

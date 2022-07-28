@@ -26,6 +26,21 @@ def yn_question(question, default):
             return False
 
 
+def return_on_exc(logger, value):
+    class Wrapper:
+        def __init__(self, function):
+            self.function = function
+
+        def __call__(self, *args, **kwargs):
+            try:
+                return self.function(*args, **kwargs)
+            except Exception as exc:
+                logger.debug("exception in %s: %s", self.function.__name__, exc)
+                return value
+
+    return Wrapper
+
+
 class LockStorage:
     def __init__(self):
         self.data = dict()
