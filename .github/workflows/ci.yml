@@ -72,8 +72,6 @@ jobs:
           conan profile new default --detect
           conan profile update settings.compiler.libcxx=libstdc++11 default
           conan profile show default
-          conan config set tools.system.package_manager:mode=install
-          conan config set tools.system.package_manager:sudo=True
 
       - name: Checkout
         uses: actions/checkout@v2
