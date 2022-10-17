@@ -12,12 +12,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Setup npm
-        uses: actions/setup-node@v2-beta
+        uses: actions/setup-node@v3
         with:
-          node-version: "12"
+          node-version: "16"
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Build static site
         run: |
@@ -27,30 +27,28 @@ jobs:
 
       - name: Deploy site
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: JamesIves/github-pages-deploy-action@3.7.1
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages
-          FOLDER: ccb-frontend/dist
-          CLEAN: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: ccb-frontend/dist
+          clean: true
 
   ci:
     runs-on: ubuntu-20.04
     steps:
       - name: Setup python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v4
         with:
           python-version: 3.8
 
       - name: Prepare ccache timestamp
         id: ccache_cache_timestamp
-        shell: cmake -P {0}
         run: |
-          string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-          message("::set-output name=timestamp::${current_date}")
+          echo "timestamp=$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_OUTPUT
 
       - name: Configure ccache cache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.ccache
           key: ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
@@ -76,7 +74,7 @@ jobs:
           conan profile show default
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Edit version for release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
@@ -125,13 +123,13 @@ jobs:
         run: python3 setup.py sdist
 
       - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@3.7.1
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: status
-          FOLDER: status
-          TARGET_FOLDER: dev
-          CLEAN: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: status
+          folder: status
+          target-folder: dev
+          clean: false
 
       - name: Publish package
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
