@@ -25,8 +25,7 @@ jobs:
       - name: Prepare ccache timestamp
         id: ccache_cache_timestamp
         run: |
-          echo "timestamp=" >> $GITHUB_OUTPUT
-          date "+%Y-%m-%d-%H;%M;%S" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_OUTPUT
 
       - name: Configure ccache cache files
         uses: actions/cache@v3
