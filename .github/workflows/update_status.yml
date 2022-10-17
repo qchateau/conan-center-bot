@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Setup python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v4
         with:
           python-version: 3.8
 
@@ -30,7 +30,7 @@ jobs:
           message("::set-output name=timestamp::${current_date}")
 
       - name: Configure ccache cache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.ccache
           key: ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
@@ -56,7 +56,7 @@ jobs:
           conan profile show default
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install CCB locally
         run: python3 -m pip install .
@@ -95,10 +95,10 @@ jobs:
         run: sleep 300
 
       - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@3.7.1
+        uses: JamesIves/github-pages-deploy-action@4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: status
-          FOLDER: status
-          TARGET_FOLDER: prod
-          CLEAN: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: status
+          folder: status
+          target-folder: prod
+          clean: false
