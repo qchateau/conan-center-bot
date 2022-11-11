@@ -14,7 +14,7 @@
     "axios": "^0.21.0",
     "vue": "^2.5.2",
     "vue-router": "^3.4.5",
-    "vuetify": "^2.3.18",
+    "vuetify": "^2.6.10",
     "vue-json-viewer": "^2.2.16"
   },
   "devDependencies": {
