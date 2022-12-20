@@ -162,7 +162,7 @@ async def test_recipe(recipe, version_str):
         logger.info("%s: running test", recipe.name)
         reference = f"{recipe.name}/{version_str}@"
         process = await run(
-            ["conan", "create", ".", reference],
+            ["conan", "create", ".", reference, "--build=missing"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
