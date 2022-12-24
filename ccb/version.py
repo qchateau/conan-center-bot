@@ -28,13 +28,19 @@ class Version:
         date_match = VERSION_DATE_RE.search(
             self.fixed if self.fixed != self.UNKNOWN else self.original
         )
-        self.is_date = bool(date_match)
-        if not meta.date and self.is_date:
-            meta = meta._replace(
-                date=datetime(
-                    *[int(v) for v in date_match.groups()], tzinfo=timezone.utc
+        date = None
+        if date_match:
+            try:
+                date = datetime(
+                    *[int(v) for v in date_match.groups()],
+                    tzinfo=timezone.utc,
                 )
-            )
+            except ValueError:
+                # happens if date is invalid
+                pass
+        self.is_date = bool(date)
+        if not meta.date and self.is_date:
+            meta = meta._replace(date=date)
         self.meta = meta
 
     @property
