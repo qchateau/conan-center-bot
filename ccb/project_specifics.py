@@ -14,7 +14,7 @@ PROJECT_TAGS_BLACKLIST = {
     "openssl": [re.compile(r"^OpenSSL-fips-(.*)")] + TAGS_BLACKLIST,
     "libzip": [re.compile(r"^brian-gladman-fcrypt-(.*)")] + TAGS_BLACKLIST,
     "libselinux": [re.compile(r"^[0-9]{8}(.*)")] + TAGS_BLACKLIST,
-    "pybind11": [re.compile(r"(.*)b[0-9]+$")] + TAGS_BLACKLIST,
+    "pybind11": [re.compile(r"(.*)b[0-9]+$"), re.compile(r"^(archive|milestones_reached)/")] + TAGS_BLACKLIST,
     "lerc": [re.compile(r"^runtimecore_(.*)")] + TAGS_BLACKLIST,
     "xtensor": [re.compile(r"(.*)-binder[0-9]*$")] + TAGS_BLACKLIST,
     "libunwind": [re.compile(r"^4\.0\.(6|7|9|10)$")] + TAGS_BLACKLIST,
