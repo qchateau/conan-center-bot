@@ -26,7 +26,7 @@ setup(
         "ruamel.yaml<0.17",
         "aiohttp<4",
         "colored<2",
-        "conan",
+        "conan<2",
     ],
     author="Quentin Chateau",
     author_email="quentin.chateau@gmail.com",
