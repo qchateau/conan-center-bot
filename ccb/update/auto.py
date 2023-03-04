@@ -11,7 +11,7 @@ import traceback
 from .common import update_one_recipe, UpdateStatus, count_ccb_commits, TestStatus
 from ..version import Version
 from ..recipe import Recipe, VersionedRecipe, get_recipes_list
-from ..git import branch_exists, remove_branch
+from ..git import branch_exists, remote_branch_exists, remove_branch
 from ..utils import format_duration, SemaphoneStorage
 from ..cci import cci_interface
 
@@ -50,10 +50,12 @@ async def auto_update_one_recipe(
             logger.info("%s: skipped (PR exists)", recipe.name)
             return UpdateStatus(updated=False, details="PR exists")
 
-        if await branch_exists(recipe, branch_name):
+        if await remote_branch_exists(recipe, branch_name, push_to):
             if rebuild_if_exists:
-                await remove_branch(recipe, branch_name)
+                if await branch_exists(recipe, branch_name):
+                    await remove_branch(recipe, branch_name)
             else:
+                logger.info("%s: skipped (remote branch exists)", recipe.name)
                 owner, repo = await cci_interface.owner_and_repo(recipe.path, push_to)
                 return UpdateStatus(
                     updated=True,
