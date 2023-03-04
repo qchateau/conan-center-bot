@@ -12,10 +12,11 @@ from .common import update_one_recipe, UpdateStatus, count_ccb_commits, TestStat
 from ..version import Version
 from ..recipe import Recipe, VersionedRecipe, get_recipes_list
 from ..git import branch_exists, remove_branch
-from ..utils import format_duration
+from ..utils import format_duration, SemaphoneStorage
 from ..cci import cci_interface
 
 
+update_sem = SemaphoneStorage(8)
 logger = logging.getLogger(__name__)
 RE_ERROR_METHOD = re.compile(r"Error in (\w+)\(\) method")
 
@@ -62,13 +63,14 @@ async def auto_update_one_recipe(
                     branch_remote_repo=repo,
                 )
 
-        return await update_one_recipe(
-            recipe=recipe,
-            new_upstream_version=new_upstream_version,
-            run_test=True,
-            push_to=push_to,
-            force_push=True,
-            branch_name=branch_name,
+        async with update_sem.get():
+            return await update_one_recipe(
+                recipe=recipe,
+                new_upstream_version=new_upstream_version,
+                run_test=True,
+                push_to=push_to,
+                force_push=True,
+                branch_name=branch_name,
         )
     except Exception:
         logger.error(
