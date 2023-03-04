@@ -16,7 +16,7 @@ from ..utils import format_duration, SemaphoneStorage
 from ..cci import cci_interface
 
 
-update_sem = SemaphoneStorage(8)
+update_sem = SemaphoneStorage(int(os.environ.get("CCB_UPDATE_CONCURRENCY", "16")))
 logger = logging.getLogger(__name__)
 RE_ERROR_METHOD = re.compile(r"Error in (\w+)\(\) method")
 
