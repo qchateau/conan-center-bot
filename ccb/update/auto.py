@@ -8,13 +8,15 @@ import logging
 import datetime
 import traceback
 
-from .common import update_one_recipe, UpdateStatus, count_ccb_commits
+from .common import update_one_recipe, UpdateStatus, count_ccb_commits, TestStatus
 from ..version import Version
 from ..recipe import Recipe, VersionedRecipe, get_recipes_list
 from ..git import branch_exists, remove_branch
-from ..utils import format_duration
+from ..utils import format_duration, SemaphoneStorage
+from ..cci import cci_interface
 
 
+update_sem = SemaphoneStorage(int(os.environ.get("CCB_UPDATE_CONCURRENCY", "16")))
 logger = logging.getLogger(__name__)
 RE_ERROR_METHOD = re.compile(r"Error in (\w+)\(\) method")
 
@@ -31,6 +33,7 @@ async def auto_update_one_recipe(
     new_upstream_version,
     branch_prefix,
     push_to,
+    rebuild_if_exists,
 ):
     assert isinstance(recipe, VersionedRecipe)
 
@@ -48,15 +51,26 @@ async def auto_update_one_recipe(
             return UpdateStatus(updated=False, details="PR exists")
 
         if await branch_exists(recipe, branch_name):
-            await remove_branch(recipe, branch_name)
+            if rebuild_if_exists:
+                await remove_branch(recipe, branch_name)
+            else:
+                owner, repo = await cci_interface.owner_and_repo(recipe.path, push_to)
+                return UpdateStatus(
+                    updated=True,
+                    test_status=TestStatus(success=True, duration=0),
+                    branch_name=branch_name,
+                    branch_remote_owner=owner,
+                    branch_remote_repo=repo,
+                )
 
-        return await update_one_recipe(
-            recipe=recipe,
-            new_upstream_version=new_upstream_version,
-            run_test=True,
-            push_to=push_to,
-            force_push=True,
-            branch_name=branch_name,
+        async with update_sem.get():
+            return await update_one_recipe(
+                recipe=recipe,
+                new_upstream_version=new_upstream_version,
+                run_test=True,
+                push_to=push_to,
+                force_push=True,
+                branch_name=branch_name,
         )
     except Exception:
         logger.error(
@@ -164,7 +178,7 @@ async def recipe_info_details(recipe):
     return None
 
 
-async def auto_update_all_recipes(cci_path, branch_prefix, push_to, recipes):
+async def auto_update_all_recipes(cci_path, branch_prefix, push_to, recipes, rebuild_all):
     t0 = time.time()
     ccb_commits_count = await count_ccb_commits(cci_path)
     logger.info("found %s CCB commits in CCI", ccb_commits_count)
@@ -200,6 +214,7 @@ async def auto_update_all_recipes(cci_path, branch_prefix, push_to, recipes):
                     v,
                     branch_prefix,
                     push_to,
+                    rebuild_all,
                 )
             ),
             details=await recipe_info_details(r),

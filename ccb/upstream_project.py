@@ -28,7 +28,7 @@ class _Unsupported(RuntimeError):
     pass
 
 
-clone_sem = SemaphoneStorage(3)
+clone_sem = SemaphoneStorage(int(os.environ.get("CCB_CLONE_CONCURRENCY", "3")))
 
 
 def get_upstream_project(recipe):

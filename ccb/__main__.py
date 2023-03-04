@@ -66,6 +66,7 @@ def cmd_auto_update_recipes(args):
             push_to=args.push_to,
             branch_prefix=args.branch_prefix,
             recipes=args.recipe if args.recipe else None,
+            rebuild_all=args.rebuild_all,
         )
     )
 
@@ -180,6 +181,11 @@ def main():
         "--recipe",
         nargs="*",
         help="Restrict to auto-update to a list of recipe.",
+    )
+    parser_aur.add_argument(
+        "--rebuild-all",
+        action="store_true",
+        help="Rebuild all branches even if they already exist.",
     )
     parser_aur.add_argument("--push-to", help="Remote name to push new branches to")
 
