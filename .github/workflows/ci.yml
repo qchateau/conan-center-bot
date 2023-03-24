@@ -112,6 +112,7 @@ jobs:
           cat ./status/v1-update.json
 
       - name: Update dev issue
+        if: github.repository == 'qchateau/conan-center-bot'
         run: |
           conan-center-bot update-status-issue \
             --no-link-pr \
