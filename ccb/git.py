@@ -96,9 +96,9 @@ class SubprocessError(RuntimeError):
         self.process = process
 
 async def push_branch(recipe, remote, branch_name, force):
-    process = await create_subprocess_exec("git", ["push", "-q", "--set-upstream"]
-        + (["-f"] if force else [])
-        + [remote, branch_name],
+    process = await create_subprocess_exec("git", "push", "-q", "--set-upstream",
+        "-f" if force else "",
+        remote, branch_name,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=recipe.path)
