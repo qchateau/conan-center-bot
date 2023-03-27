@@ -20,6 +20,8 @@ async def check_call(cmd, **kwargs):
     process = await run(cmd=cmd, **kwargs)
     code = await process.wait()
     if code != 0:
+        print(f"error {code} for command {cmd}")
+        exit(-1)
         raise SubprocessError(process)
 
 
