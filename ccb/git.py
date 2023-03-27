@@ -2,6 +2,8 @@ import os
 import tempfile
 import subprocess
 import shutil
+from asyncio.subprocess import create_subprocess_exec
+import logging
 
 from .recipe import Recipe, VersionedRecipe
 from .subprocess import call, check_call, check_output
@@ -86,9 +88,12 @@ async def create_branch_and_commit(recipe, branch_name, commit_msg):
 async def remove_branch(recipe, branch_name):
     await check_call(["git", "branch", "-q", "-D", branch_name], cwd=recipe.path)
 
-from asyncio.subprocess import create_subprocess_exec
-import logging
 logger = logging.getLogger(__name__)
+
+class SubprocessError(RuntimeError):
+    def __init__(self, process):
+        super().__init__("subprocess error")
+        self.process = process
 
 async def push_branch(recipe, remote, branch_name, force):
     process = await create_subprocess_exec("git", ["push", "-q", "--set-upstream"]
@@ -97,7 +102,7 @@ async def push_branch(recipe, remote, branch_name, force):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=recipe.path)
-    stdout, stderr = await proc.communicate()
+    stdout, stderr = await process.communicate()
     
     if process.returncode != 0:
         logger.info("error pushing branch %s to remote %s from path %s", branch_name, remote, recipe.path)
