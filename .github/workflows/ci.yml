@@ -112,13 +112,12 @@ jobs:
           cat ./status/v1-update.json
 
       - name: Update dev issue
-        if: github.repository == 'qchateau/conan-center-bot'
         run: |
           conan-center-bot update-status-issue \
             --no-link-pr \
             --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/4
+            https://github.com/${{ github.repository }}/issues/4
 
       - name: Package
         run: python3 setup.py sdist
@@ -126,6 +125,7 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
+          token: ${{ env.GITHUB_TOKEN }}
           branch: status
           folder: status
           target-folder: dev
