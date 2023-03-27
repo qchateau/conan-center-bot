@@ -86,17 +86,26 @@ async def create_branch_and_commit(recipe, branch_name, commit_msg):
 async def remove_branch(recipe, branch_name):
     await check_call(["git", "branch", "-q", "-D", branch_name], cwd=recipe.path)
 
+from asyncio.subprocess import create_subprocess_exec
+import logging
+logger = logging.getLogger(__name__)
 
 async def push_branch(recipe, remote, branch_name, force):
-    await check_call(
-        ["git", "push", "-q", "--set-upstream"]
+    process = await create_subprocess_exec("git", ["push", "-q", "--set-upstream"]
         + (["-f"] if force else [])
         + [remote, branch_name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        cwd=recipe.path,
-    )
-
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=recipe.path)
+    stdout, stderr = await proc.communicate()
+    
+    if process.returncode != 0:
+        logger.info("error pushing branch %s to remote %s from path %s", branch_name, remote, recipe.path)
+        if stdout:
+            logger.info("stdout: %s", stdout.decode())
+        if stderr:
+            logger.info("stderr: %s", stderr.decode())
+        raise SubprocessError(process)
 
 async def count_commits_matching(git_path, pattern):
     lines = (
