@@ -300,7 +300,7 @@ class GithubProject(GitProject):
 
 class GitlabProject(GitProject):
     SOURCE_URL_RE = re.compile(
-        r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/archive/"
+        r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/(?:archive|releases)/"
     )
 
     def __init__(self, recipe):
@@ -311,10 +311,49 @@ class GitlabProject(GitProject):
         self.domain = domain
         self.owner = owner
         self.repo = repo
+        self.__versions = None
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as client:
+                    async with client.get(
+                        f"https://{self.domain}/api/v4/projects/{self.owner}%2F{self.repo}/releases"
+                    ) as resp:
+                        def _get_url_for_version(v):
+                            artifacts = v["assets"]["links"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.xz"):
+                                    return a["direct_asset_url"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.gz"):
+                                    return a["direct_asset_url"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.bz2"):
+                                    return a["direct_asset_url"]
+                            return f"https://{self.domain}/{self.owner}/{self.repo}/-/archive/{v['tag_name']}/{self.repo}-{v['tag_name']}.tar.gz"
+                        self.__versions = []
+                        for v in await resp.json():
+                            tag_name = v["tag_name"] or v["name"]
+                            r = Version(tag_name, fixer=self.fixer)
+                            if not self._valid_tags(tag_name):
+                                continue
+                            r.url = _get_url_for_version(v)
+                            self.__versions.append(r)
+            except Exception as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                self.__versions = []
+        if self.__versions:
+            return self.__versions
+        else:
+            return await super().versions()
 
     def source_url(self, version):
         if version.unknown:
             return None
+        if hasattr(version, "url"):
+            return version.url
         return f"https://{self.domain}/{self.owner}/{self.repo}/-/archive/{version.original}/{self.repo}-{version.original}.tar.gz"
 
     @classmethod
