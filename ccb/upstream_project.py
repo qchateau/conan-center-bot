@@ -232,7 +232,8 @@ class GithubReleaseProject(UpstreamProject):
                     headers["Authorization"] = f"token {github_token}"
                 with client.get(
                     f"https://api.github.com/repos/{self.owner}/{self.repo}/releases", headers=headers
-                ) as resp:                                      
+                ) as resp:
+                    resp.raise_for_status()                               
                     def _get_url_for_version(v):
                         artifacts = v["assets"]
                         for a in artifacts:
@@ -246,10 +247,10 @@ class GithubReleaseProject(UpstreamProject):
                                 return a["browser_download_url"]
                         for a in artifacts:
                             return a["browser_download_url"]
-                        return f"https://github.com/{self.owner}/{self.repo}/archive/{v['tag_name']}.tar.gz"  
+                        return f"https://github.com/{self.owner}/{self.repo}/archive/refs/tags/{v['tag_name']}.tar.gz"  
                     self.__versions = []
                     for v in resp.json():
-                        r = Version(v["name"])
+                        r = Version(v["tag_name"] or v["name"])
                         r.url = _get_url_for_version(v)
                         self.__versions.append(r)
                     
