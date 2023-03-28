@@ -9,6 +9,7 @@ import hashlib
 import traceback
 import logging
 import aiohttp
+import requests
 
 from .version import Version, VersionMeta
 from .project_specifics import (
@@ -223,7 +224,41 @@ class GithubReleaseProject(UpstreamProject):
         super().__init__(recipe)
         self.owner = owner
         self.repo = repo
-        self.__versions = None
+        try:
+            with requests.Session() as client:
+                github_token = get_github_token()
+                headers = {"Accept": "application/vnd.github.v3+json"}
+                if github_token:
+                    headers["Authorization"] = f"token {github_token}"
+                with client.get(
+                    f"https://api.github.com/repos/{self.owner}/{self.repo}/releases", headers=headers
+                ) as resp:                                      
+                    def _get_url_for_version(v):
+                        artifacts = v["assets"]
+                        for a in artifacts:
+                            if a["content_type"] == "application/x-xz":
+                                return a["browser_download_url"]
+                        for a in artifacts:
+                            if a["content_type"] == "application/gzip":
+                                return a["browser_download_url"]
+                        for a in artifacts:
+                            if a["content_type"].startswith("application"):
+                                return a["browser_download_url"]
+                        for a in artifacts:
+                            return a["browser_download_url"]
+                        return f"https://github.com/{self.owner}/{self.repo}/archive/{v['tag_name']}.tar.gz"  
+                    self.__versions = []
+                    for v in resp.json():
+                        r = Version(v["name"])
+                        r.url = _get_url_for_version(v)
+                        self.__versions.append(r)
+                    
+        except Exception as exc:
+            logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+            logger.debug(traceback.format_exc())
+            self.__versions = []   
+        if not self.__versions:
+            raise _Unsupported()
 
     @classmethod
     def _get_owner_repo(cls, recipe):
@@ -242,39 +277,6 @@ class GithubReleaseProject(UpstreamProject):
         raise _Unsupported()
 
     async def versions(self):
-        if self.__versions is None:
-            try:
-                async with aiohttp.ClientSession(raise_for_status=True) as client:
-                    github_token = get_github_token()
-                    headers = {"Accept": "application/vnd.github.v3+json"}
-                    if github_token:
-                        headers["Authorization"] = f"token {github_token}"
-                    async with client.get(
-                        f"https://api.github.com/repos/{self.owner}/{self.repo}/releases", headers=headers
-                    ) as resp:                                      
-                        def _get_url_for_version(v):
-                            artifacts = v["assets"]
-                            for a in artifacts:
-                                if a["content_type"] == "application/x-xz":
-                                    return a["browser_download_url"]
-                            for a in artifacts:
-                                if a["content_type"] == "application/gzip":
-                                    return a["browser_download_url"]
-                            for a in artifacts:
-                                if a["content_type"].startswith("application"):
-                                    return a["browser_download_url"]
-                            for a in artifacts:
-                                return a["browser_download_url"]
-                            return f"https://github.com/{self.owner}/{self.repo}/archive/{v['tag_name']}.tar.gz"  
-                        self.__versions = []
-                        for v in await resp.json():
-                            r = Version(v["name"])
-                            r.url = _get_url_for_version(v)
-                            self.__versions.append(r)
-            except Exception as exc:
-                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
-                logger.debug(traceback.format_exc())
-                self.__versions = []        
         return self.__versions
 
     def source_url(self, version):
