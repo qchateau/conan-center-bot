@@ -19,6 +19,7 @@ from .project_specifics import (
 )
 from .subprocess import check_output, check_call
 from .utils import SemaphoneStorage, format_duration
+from .github import get_github_token
 
 
 logger = logging.getLogger(__name__)
@@ -214,6 +215,73 @@ class GitProject(UpstreamProject):
                     return False
             return True
 
+class GithubReleaseProject(UpstreamProject):
+    SOURCE_URL_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
+
+    def __init__(self, recipe):
+        owner, repo = self._get_owner_repo(recipe)
+        super().__init__(recipe)
+        self.owner = owner
+        self.repo = repo
+        self.__versions = None
+
+    @classmethod
+    def _get_owner_repo(cls, recipe):
+        try:
+            url = recipe.source()["url"]
+            match = cls.SOURCE_URL_RE.match(url)
+            if match:
+                return match.groups()
+        except Exception as exc:
+            logger.debug(
+                "%s: not supported as GitHub project because of the following exception: %s",
+                recipe.name,
+                repr(exc),
+            )
+
+        raise _Unsupported()
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as client:
+                    github_token = get_github_token()
+                    headers = {"Accept": "application/vnd.github.v3+json"}
+                    if github_token:
+                        headers["Authorization"] = f"token {github_token}"
+                    async with client.get(
+                        f"https://api.github.com/repos/{self.owner}/{self.repo}/releases", headers=headers
+                    ) as resp:                                      
+                        def _get_url_for_version(v):
+                            artifacts = v["assets"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-xz":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/gzip":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"].startswith("application"):
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                return a["browser_download_url"]
+                            return f"https://github.com/{self.owner}/{self.repo}/archive/{v['tag_name']}.tar.gz"  
+                        self.__versions = []
+                        for v in await resp.json():
+                            r = Version(v["name"])
+                            r.url = _get_url_for_version(v)
+                            self.__versions.append(r)
+            except Exception as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                self.__versions = []        
+        return self.__versions
+
+    def source_url(self, version):
+        if version.unknown:
+            return None
+        return version.url
+
 
 class GithubProject(GitProject):
     HOMEPAGE_RE = re.compile(r"https?://github.com/([^/]+)/([^/]+)")
@@ -334,4 +402,4 @@ class GnomeProject(UpstreamProject):
         return f"https://{self.domain}/sources/{self.project}/{major}.{minor}/{self.project}-{major}.{minor}.{patch}.tar.xz"
 
 
-_CLASSES = [GithubProject, GitlabProject, GnomeProject]
+_CLASSES = [GithubReleaseProject, GithubProject, GitlabProject, GnomeProject]
