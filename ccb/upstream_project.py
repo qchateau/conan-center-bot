@@ -9,7 +9,6 @@ import hashlib
 import traceback
 import logging
 import aiohttp
-import requests
 
 from .version import Version, VersionMeta
 from .project_specifics import (
@@ -228,10 +227,58 @@ class GithubProject(GitProject):
         super().__init__(recipe, git_url)
         self.owner = owner
         self.repo = repo
+        self.__versions = None
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                github_token = get_github_token()
+                headers = {"Accept": "application/vnd.github.v3+json"}
+                if github_token:
+                    headers["Authorization"] = f"token {github_token}"
+                async with aiohttp.ClientSession(raise_for_status=True, headers=headers) as client:
+                    async with client.get(
+                        f"https://api.github.com/repos/{self.owner}/{self.repo}/releases"
+                    ) as resp:                          
+                        def _get_url_for_version(v):
+                            artifacts = v["assets"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-xz":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-gzip":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/gzip":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-bzip2":
+                                    return a["browser_download_url"]
+                            return f"https://github.com/{self.owner}/{self.repo}/archive/refs/tags/{v['tag_name']}.tar.gz"  
+                        self.__versions = []
+                        for v in await resp.json():
+                            tag_name = v["tag_name"] or v["name"]
+                            r = Version(tag_name, fixer=self.fixer)                        
+                            if not self._valid_tags(tag_name):
+                                continue
+                            r.url = _get_url_for_version(v)
+                            self.__versions.append(r)
+                        
+            except Exception as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                self.__versions = []   
+        if self.__versions:
+            return self.__versions
+        else:
+            return await super().versions()
+
 
     def source_url(self, version):
         if version.unknown:
             return None
+        if hasattr(version, "url"):
+            return version.url
         return f"https://github.com/{self.owner}/{self.repo}/archive/{version.original}.tar.gz"
 
     @classmethod
@@ -249,57 +296,6 @@ class GithubProject(GitProject):
             )
 
         raise _Unsupported()
-
-
-class GithubReleaseProject(GithubProject):
-
-    def __init__(self, recipe):
-        super().__init__(recipe)
-        try:
-            with requests.Session() as client:
-                github_token = get_github_token()
-                headers = {"Accept": "application/vnd.github.v3+json"}
-                if github_token:
-                    headers["Authorization"] = f"token {github_token}"
-                with client.get(
-                    f"https://api.github.com/repos/{self.owner}/{self.repo}/releases", headers=headers
-                ) as resp:
-                    resp.raise_for_status()                               
-                    def _get_url_for_version(v):
-                        artifacts = v["assets"]
-                        for a in artifacts:
-                            if a["content_type"] == "application/x-xz":
-                                return a["browser_download_url"]
-                        for a in artifacts:
-                            if a["content_type"] == "application/gzip":
-                                return a["browser_download_url"]
-                        for a in artifacts:
-                            if a["content_type"] == "application/x-bzip2":
-                                return a["browser_download_url"]
-                        return f"https://github.com/{self.owner}/{self.repo}/archive/refs/tags/{v['tag_name']}.tar.gz"  
-                    self.__versions = []
-                    for v in resp.json():
-                        tag_name = v["tag_name"] or v["name"]
-                        r = Version(tag_name, fixer=self.fixer)                        
-                        if not self._valid_tags(tag_name):
-                            continue
-                        r.url = _get_url_for_version(v)
-                        self.__versions.append(r)
-                    
-        except Exception as exc:
-            logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
-            logger.debug(traceback.format_exc())
-            self.__versions = []   
-        if not self.__versions:
-            raise _Unsupported()
-
-    async def versions(self):
-        return self.__versions
-
-    def source_url(self, version):
-        if version.unknown:
-            return None
-        return version.url
 
 
 class GitlabProject(GitProject):
@@ -387,4 +383,4 @@ class GnomeProject(UpstreamProject):
         return f"https://{self.domain}/sources/{self.project}/{major}.{minor}/{self.project}-{major}.{minor}.{patch}.tar.xz"
 
 
-_CLASSES = [GithubReleaseProject, GithubProject, GitlabProject, GnomeProject]
+_CLASSES = [GithubProject, GitlabProject, GnomeProject]
