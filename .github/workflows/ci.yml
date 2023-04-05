@@ -94,7 +94,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://qchateau:${{ secrets.GITHUB_TOKEN }}@github.com/conan-center-bot-testing/conan-center-index.git
+          git clone https://qchateau:${{ secrets.issue_github_token }}@github.com/conan-center-bot-testing/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -107,7 +107,7 @@ jobs:
           mkdir status
           conan-center-bot auto-update-recipes \
             --cci conan-center-index \
-            --github-token "${{ secrets.GITHUB_TOKEN }}" \
+            --github-token "${{ secrets.issue_github_token }}" \
             --push-to origin \
             > ./status/v1-update.json
           cat ./status/v1-update.json
