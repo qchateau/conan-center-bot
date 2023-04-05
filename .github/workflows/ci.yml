@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 env:
   CONAN_SYSREQUIRES_MODE: enabled
   PYTHONUNBUFFERED: 1
