@@ -80,12 +80,18 @@ jobs:
           cat ./status/v1-update.json
 
       - name: Update status issue
+        run: |
+          conan-center-bot update-status-issue \
+            --github-token "$GITHUB_TOKEN" \
+            ./status/v1-update.json \
+            https://github.com/${{ github.repository }}/issues/1
+
+      - name: Update status issue
         if: github.repository == 'qchateau/conan-center-bot'
         run: |
           conan-center-bot update-status-issue \
             --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/1 \
             https://github.com/conan-io/conan-center-index/issues/3470
 
       # Sleep to avoid deploying in both workflow at the same time
