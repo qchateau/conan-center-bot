@@ -8,6 +8,9 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
   CONAN_SYSREQUIRES_MODE: enabled
@@ -102,7 +105,7 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ env.GITHUB_TOKEN }}
           branch: status
           folder: status
           target-folder: prod
