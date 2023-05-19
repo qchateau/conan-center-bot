@@ -8,6 +8,7 @@ permissions:
   contents: write
 
 env:
+  GITHUB_TOKEN: ${{ secrets.issue_github_token }}
   CONAN_SYSREQUIRES_MODE: enabled
   PYTHONUNBUFFERED: 1
 
@@ -97,7 +98,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://${{ github.repository_owner }}:${{ secrets.issue_github_token }}@github.com/${{ github.repository_owner }}/conan-center-index.git
+          git clone https://${{ github.repository_owner }}:$GITHUB_TOKEN@github.com/${{ github.repository_owner }}/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -110,7 +111,7 @@ jobs:
           mkdir status
           conan-center-bot auto-update-recipes \
             --cci conan-center-index \
-            --github-token "${{ secrets.issue_github_token }}" \
+            --github-token "$GITHUB_TOKEN" \
             --push-to origin \
             --branch-prefix dev/ccb-
             > ./status/v1-update.json
@@ -120,7 +121,7 @@ jobs:
         run: |
           conan-center-bot update-status-issue \
             --no-link-pr \
-            --github-token "${{ secrets.issue_github_token }}" \
+            --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
             https://github.com/${{ github.repository }}/issues/4
 
