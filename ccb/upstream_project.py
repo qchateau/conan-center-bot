@@ -1,6 +1,7 @@
 import re
 import os
 import abc
+import asyncio
 import time
 import typing
 import datetime
@@ -267,7 +268,7 @@ class GithubProject(GitProject):
             except aiohttp.ClientResponseError as exc:
                 for h in exc.headers:
                     if h == "Retry-After":
-                        time.sleep(min(10, int(exc.headers[h])))
+                        await asyncio.sleep(max(2, min(10, int(exc.headers[h]))))
                         return await self.versions()
                 logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
                 logger.debug(traceback.format_exc())
