@@ -8,6 +8,9 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   GITHUB_TOKEN: ${{ secrets.issue_github_token }}
   CONAN_SYSREQUIRES_MODE: enabled
@@ -61,7 +64,7 @@ jobs:
 
       - name: Clone CCI
         run: |
-          git clone https://qchateau:$GITHUB_TOKEN@github.com/qchateau/conan-center-index.git
+          git clone https://${{ github.repository_owner }}:$GITHUB_TOKEN@github.com/${{ github.repository_owner }}/conan-center-index.git
           cd conan-center-index
           git remote add upstream https://github.com/conan-io/conan-center-index.git
           git fetch upstream
@@ -84,7 +87,14 @@ jobs:
           conan-center-bot update-status-issue \
             --github-token "$GITHUB_TOKEN" \
             ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/1 \
+            https://github.com/${{ github.repository }}/issues/1
+
+      - name: Update status issue
+        if: github.repository == 'qchateau/conan-center-bot'
+        run: |
+          conan-center-bot update-status-issue \
+            --github-token "$GITHUB_TOKEN" \
+            ./status/v1-update.json \
             https://github.com/conan-io/conan-center-index/issues/3470
 
       # Sleep to avoid deploying in both workflow at the same time
@@ -95,7 +105,7 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ env.GITHUB_TOKEN }}
           branch: status
           folder: status
           target-folder: prod

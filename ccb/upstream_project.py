@@ -1,6 +1,7 @@
 import re
 import os
 import abc
+import asyncio
 import time
 import typing
 import datetime
@@ -19,6 +20,7 @@ from .project_specifics import (
 )
 from .subprocess import check_output, check_call
 from .utils import SemaphoneStorage, format_duration
+from .github import get_github_token, print_github_token_rate_limit
 
 
 logger = logging.getLogger(__name__)
@@ -226,10 +228,63 @@ class GithubProject(GitProject):
         super().__init__(recipe, git_url)
         self.owner = owner
         self.repo = repo
+        self.__versions = None
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                github_token = get_github_token()
+                headers = {"Accept": "application/vnd.github.v3+json"}
+                if github_token:
+                    headers["Authorization"] = f"token {github_token}"
+                async with aiohttp.ClientSession(raise_for_status=True, headers=headers) as client:
+                    async with client.get(
+                        f"https://api.github.com/repos/{self.owner}/{self.repo}/releases"
+                    ) as resp:                          
+                        def _get_url_for_version(v):
+                            artifacts = v["assets"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-xz":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-gzip":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/gzip":
+                                    return a["browser_download_url"]
+                            for a in artifacts:
+                                if a["content_type"] == "application/x-bzip2":
+                                    return a["browser_download_url"]
+                            return f"https://github.com/{self.owner}/{self.repo}/archive/refs/tags/{v['tag_name']}.tar.gz"  
+                        self.__versions = []
+                        for v in await resp.json():
+                            tag_name = v["tag_name"] or v["name"]
+                            r = Version(tag_name, fixer=self.fixer)                        
+                            if not self._valid_tags(tag_name):
+                                continue
+                            r.url = _get_url_for_version(v)
+                            self.__versions.append(r)
+
+            except aiohttp.ClientResponseError as exc:
+                for h in exc.headers:
+                    if h == "Retry-After":
+                        await asyncio.sleep(max(2, min(10, int(exc.headers[h]))))
+                        return await self.versions()
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                logger.debug(traceback.format_exc())
+                print_github_token_rate_limit()
+                self.__versions = []
+        if self.__versions:
+            return self.__versions
+        else:
+            return await super().versions()
+
 
     def source_url(self, version):
         if version.unknown:
             return None
+        if hasattr(version, "url"):
+            return version.url
         return f"https://github.com/{self.owner}/{self.repo}/archive/{version.original}.tar.gz"
 
     @classmethod
@@ -251,7 +306,7 @@ class GithubProject(GitProject):
 
 class GitlabProject(GitProject):
     SOURCE_URL_RE = re.compile(
-        r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/archive/"
+        r"https?://([^/]*gitlab[^/]+)/([^/]+)/([^/]+)/-/(?:archive|releases)/"
     )
 
     def __init__(self, recipe):
@@ -262,10 +317,51 @@ class GitlabProject(GitProject):
         self.domain = domain
         self.owner = owner
         self.repo = repo
+        self.__versions = None
+
+    async def versions(self):
+        if self.__versions is None:
+            try:
+                async with aiohttp.ClientSession(raise_for_status=True) as client:
+                    async with client.get(
+                        f"https://{self.domain}/api/v4/projects/{self.owner}%2F{self.repo}/releases"
+                    ) as resp:
+                        def _get_url_for_version(v):
+                            artifacts = v["assets"]["links"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.xz"):
+                                    return a["direct_asset_url"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.gz"):
+                                    return a["direct_asset_url"]
+                            for a in artifacts:
+                                if a["direct_asset_url"].endswith(".tar.bz2"):
+                                    return a["direct_asset_url"]
+                            return f"https://{self.domain}/{self.owner}/{self.repo}/-/archive/{v['tag_name']}/{self.repo}-{v['tag_name']}.tar.gz"
+                        self.__versions = []
+                        for v in await resp.json():
+                            tag_name = v["tag_name"] or v["name"]
+                            r = Version(tag_name, fixer=self.fixer)
+                            if not self._valid_tags(tag_name):
+                                continue
+                            r.url = _get_url_for_version(v)
+                            self.__versions.append(r)
+            except aiohttp.ClientResponseError as exc:
+                logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                if exc.status == 429:
+                    logger.warning("gitlab rate limited %s", exc.headers)
+                logger.debug(traceback.format_exc())
+                self.__versions = []
+        if self.__versions:
+            return self.__versions
+        else:
+            return await super().versions()
 
     def source_url(self, version):
         if version.unknown:
             return None
+        if hasattr(version, "url"):
+            return version.url
         return f"https://{self.domain}/{self.owner}/{self.repo}/-/archive/{version.original}/{self.repo}-{version.original}.tar.gz"
 
     @classmethod

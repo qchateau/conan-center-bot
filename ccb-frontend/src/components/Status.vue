@@ -63,7 +63,9 @@ export default {
       if (!this.githubActionRunId) {
         return null
       }
-      return 'https://github.com/qchateau/conan-center-bot/actions/runs/' + this.githubActionRunId
+      const user = window.location.host.split('.')[0];
+      const repo = window.location.pathname.split('/')[1];
+      return `https://github.com/${user}/${repo}/actions/runs/` + this.githubActionRunId
     },
     recipes () {
       return this.$recipes.status.recipes
