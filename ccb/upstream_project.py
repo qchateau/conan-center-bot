@@ -267,7 +267,7 @@ class GithubProject(GitProject):
             except aiohttp.ClientResponseError as exc:
                 for h in exc.headers:
                     if h == "Retry-After":
-                        timer.sleep(min(10, int(exc.headers[h])))
+                        time.sleep(min(10, int(exc.headers[h])))
                         return await self.versions()
                 logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
                 logger.debug(traceback.format_exc())
