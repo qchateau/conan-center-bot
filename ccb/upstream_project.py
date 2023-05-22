@@ -19,7 +19,7 @@ from .project_specifics import (
 )
 from .subprocess import check_output, check_call
 from .utils import SemaphoneStorage, format_duration
-from .github import get_github_token
+from .github import get_github_token, print_github_token_rate_limit
 
 
 logger = logging.getLogger(__name__)
@@ -263,11 +263,16 @@ class GithubProject(GitProject):
                                 continue
                             r.url = _get_url_for_version(v)
                             self.__versions.append(r)
-                        
-            except Exception as exc:
+
+            except aiohttp.ClientResponseError as exc:
+                for h in exc.headers:
+                    if h == "Retry-After":
+                        time.sleep(int(exc.headers[h]))
+                        return await self.versions()
                 logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
                 logger.debug(traceback.format_exc())
-                self.__versions = []   
+                print_github_token_rate_limit()
+                self.__versions = []
         if self.__versions:
             return self.__versions
         else:
@@ -340,8 +345,10 @@ class GitlabProject(GitProject):
                                 continue
                             r.url = _get_url_for_version(v)
                             self.__versions.append(r)
-            except Exception as exc:
+            except aiohttp.ClientResponseError as exc:
                 logger.info("%s: error parsing repository: %s", self.recipe.name, exc)
+                if exc.status == 429:
+                    logger.warning("gitlab rate limited %s", exc.headers)
                 logger.debug(traceback.format_exc())
                 self.__versions = []
         if self.__versions:
