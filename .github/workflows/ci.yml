@@ -17,7 +17,7 @@ jobs:
           node-version: "16"
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Build static site
         run: |
@@ -74,7 +74,7 @@ jobs:
           conan profile show default
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Edit version for release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
