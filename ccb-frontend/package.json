@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "axios": "^0.21.2",
-    "vue": "^2.5.2",
+    "vue": "^3.5.13",
     "vue-router": "^3.4.5",
     "vuetify": "^2.6.10",
-    "vue-json-viewer": "^2.2.16"
+    "vue-json-viewer": "^3.0.4"
   },
   "devDependencies": {
     "autoprefixer": "^7.1.2",
