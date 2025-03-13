@@ -113,7 +113,7 @@ async def manual_update_one_recipe(
 
     if not status.updated:
         logger.info("%s: skipped (%s)", recipe_name, status.details)
-    elif status.test_ran and not status.test_success:
+    elif status.test_status and not status.test_status.success:
         logger.error("%s: test failed:\n%s", recipe_name, status.details)
 
 
