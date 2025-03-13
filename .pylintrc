@@ -60,6 +60,7 @@ disable=
     use-list-literal,
     use-dict-literal,
     unspecified-encoding,
+    too-many-positional-arguments,
     # handled by black
     format
 

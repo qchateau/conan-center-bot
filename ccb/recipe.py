@@ -192,6 +192,9 @@ class VersionedRecipe:
             or title_re.search(pr.get("title") or "")
         ]
 
+    def versions(self):
+        return self._recipe.versions()
+
     async def upstream_version(self):
         upstream_versions = await self.upstream().versions()
         for version in upstream_versions:
