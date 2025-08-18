@@ -54,7 +54,7 @@ jobs:
           conan profile show default
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install CCB locally
         run: python3 -m pip install .
