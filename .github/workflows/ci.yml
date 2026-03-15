@@ -111,13 +111,13 @@ jobs:
             > ./status/v1-update.json
           cat ./status/v1-update.json
 
-      - name: Update dev issue
-        run: |
-          conan-center-bot update-status-issue \
-            --no-link-pr \
-            --github-token "$GITHUB_TOKEN" \
-            ./status/v1-update.json \
-            https://github.com/qchateau/conan-center-bot/issues/4
+      # - name: Update dev issue
+      #   run: |
+      #     conan-center-bot update-status-issue \
+      #       --no-link-pr \
+      #       --github-token "$GITHUB_TOKEN" \
+      #       ./status/v1-update.json \
+      #       https://github.com/qchateau/conan-center-bot/issues/4
 
       - name: Package
         run: python3 setup.py sdist
